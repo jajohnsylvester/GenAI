@@ -210,8 +210,8 @@
         const pathParts = currentUrl.split('/');
         const githubIndex = pathParts.indexOf('github.io');
         
-        let REPO_OWNER = '';
-        let REPO_NAME = '';
+        let REPO_OWNER = 'jajohnsylvester';
+        let REPO_NAME = 'GenAI';
         
         if (githubIndex !== -1) {
             REPO_OWNER = pathParts[githubIndex - 1].replace('https:', '').replace('//', '');
