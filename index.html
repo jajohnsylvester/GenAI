@@ -181,15 +181,6 @@
     </style>
 </head>
 <body>
-
-    <ol>
-<li>AGI Sinan Ozdemir : <a href="https://github.com/sinanuozdemir/oreilly-agi">https://github.com/sinanuozdemir/oreilly-agi</a></li>
-<li>Deep Learning with Tensorflow , Keras, Pytorch -&gt; JonKrohn : <a href="https://github.com/jonkrohn/DLTFpT">https://github.com/jonkrohn/DLTFpT</a></li>
-<li>Personal Perplexity App Source code : <a href="https://github.com/jajohnsylvester/streamlit">https://github.com/jajohnsylvester/streamlit</a></li> 
-<li>Perplexity App : <a href="https://mypersonalstream.streamlit.app/">https://mypersonalstream.streamlit.app/</a> </li> 
-<li>Personal Expense Tracker : <a href="https://github.com/jajohnsylvester/studio">https://github.com/jajohnsylvester/studio</a></li>
-</ol>
-  
     <div class="container">
         <h1 id="repo-name">Repository Contents</h1>
         <div class="repo-info">
@@ -210,8 +201,8 @@
         const pathParts = currentUrl.split('/');
         const githubIndex = pathParts.indexOf('github.io');
         
-        let REPO_OWNER = 'jajohnsylvester';
-        let REPO_NAME = 'GenAI';
+        let REPO_OWNER = '';
+        let REPO_NAME = '';
         
         if (githubIndex !== -1) {
             REPO_OWNER = pathParts[githubIndex - 1].replace('https:', '').replace('//', '');
@@ -364,22 +355,17 @@
         }
 
         // Initialize on page load
-        if (REPO_OWNER && REPO_NAME) {
-            fetchRepoContents();
+        if (REPO_OWNER) {
+            loadRepositories();
         } else {
             document.getElementById('content').innerHTML = `
                 <div class="error">
                     <p><strong>Configuration Required</strong></p>
                     <p>Please update the REPO_OWNER and REPO_NAME variables in the script section with your GitHub username and repository name.</p>
-                    <p>Example: REPO_OWNER = 'jajohnsylvester', REPO_NAME = 'GenAI'</p>
+                    <p>Example: REPO_OWNER = 'username', REPO_NAME = 'repository-name'</p>
                 </div>
             `;
         }
     </script>
 </body>
 </html>
-
-
-
-
-
