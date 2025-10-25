@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Repository Contents</title>
+    <title>Repository Browser</title>
     <style>
         :root {
             --color-background: rgba(252, 252, 249, 1);
@@ -178,11 +178,57 @@
         .back-button:hover {
             background: var(--color-primary-hover);
         }
+
+        .repo-card {
+            background: var(--color-surface);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-card-border);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .repo-card:hover {
+            border-color: var(--color-primary);
+            box-shadow: var(--shadow-md);
+        }
+
+        .repo-card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--color-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .repo-card-description {
+            color: var(--color-text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .repo-card-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: var(--color-text-secondary);
+        }
+
+        .repo-card-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .repo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 id="repo-name">Repository Contents</h1>
+        <h1 id="repo-name">Repository Browser</h1>
         <div class="repo-info">
             <span id="repo-description"></span>
             <a id="repo-link" href="" target="_blank" rel="noopener noreferrer"></a>
@@ -191,37 +237,89 @@
         <div class="breadcrumb" id="breadcrumb"></div>
 
         <div id="content">
-            <div class="loading">Loading repository contents...</div>
+            <div class="loading">Loading repositories...</div>
         </div>
     </div>
 
     <script>
-        // Auto-detect repository from current URL
         const currentUrl = window.location.href;
         const pathParts = currentUrl.split('/');
         const githubIndex = pathParts.indexOf('github.io');
         
-        let REPO_OWNER = '';
-        let REPO_NAME = '';
+        let REPO_OWNER = 'jajohnsylvester';
         
         if (githubIndex !== -1) {
             REPO_OWNER = pathParts[githubIndex - 1].replace('https:', '').replace('//', '');
-            // Try to get repo name from path or use username.github.io
-            if (pathParts[githubIndex + 1]) {
-                REPO_NAME = pathParts[githubIndex + 1];
-            } else {
-                REPO_NAME = REPO_OWNER + '.github.io';
+        }
+
+        let currentRepo = null;
+        let currentPath = '';
+
+        async function loadRepositories() {
+            const contentDiv = document.getElementById('content');
+            contentDiv.innerHTML = '<div class="loading">Loading repositories...</div>';
+
+            try {
+                const url = `https://api.github.com/users/${REPO_OWNER}/repos?per_page=100&sort=updated`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch repositories: ${response.statusText}`);
+                }
+
+                const repos = await response.json();
+                
+                // Filter public repos
+                const publicRepos = repos.filter(repo => !repo.private);
+
+                document.getElementById('repo-name').textContent = `${REPO_OWNER}'s Repositories`;
+                document.getElementById('repo-description').textContent = `${publicRepos.length} public repositories`;
+                const repoLink = document.getElementById('repo-link');
+                repoLink.href = `https://github.com/${REPO_OWNER}`;
+                repoLink.textContent = 'View on GitHub →';
+
+                displayRepositories(publicRepos);
+                updateBreadcrumb(null, null);
+            } catch (error) {
+                contentDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
             }
         }
 
-        let currentPath = '';
+        function displayRepositories(repos) {
+            const contentDiv = document.getElementById('content');
+            
+            let html = '<div class="repo-grid">';
+
+            repos.forEach(repo => {
+                html += `
+                    <div class="repo-card" onclick="openRepository('${repo.name}')">
+                        <div class="repo-card-title">${repo.name}</div>
+                        <div class="repo-card-description">${repo.description || 'No description'}</div>
+                        <div class="repo-card-meta">
+                            ${repo.language ? `<span class="repo-card-meta-item">📝 ${repo.language}</span>` : ''}
+                            <span class="repo-card-meta-item">⭐ ${repo.stargazers_count}</span>
+                            <span class="repo-card-meta-item">🔱 ${repo.forks_count}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            contentDiv.innerHTML = html;
+        }
+
+        async function openRepository(repoName) {
+            currentRepo = repoName;
+            currentPath = '';
+            await fetchRepoContents('');
+        }
 
         async function fetchRepoContents(path = '') {
             const contentDiv = document.getElementById('content');
             contentDiv.innerHTML = '<div class="loading">Loading...</div>';
 
             try {
-                const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+                const url = `https://api.github.com/repos/${REPO_OWNER}/${currentRepo}/contents/${path}`;
                 const response = await fetch(url);
 
                 if (!response.ok) {
@@ -230,9 +328,8 @@
 
                 const data = await response.json();
                 
-                // Fetch repo info if at root
                 if (!path) {
-                    const repoResponse = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`);
+                    const repoResponse = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${currentRepo}`);
                     const repoData = await repoResponse.json();
                     
                     document.getElementById('repo-name').textContent = repoData.name;
@@ -243,7 +340,7 @@
                 }
 
                 displayContents(data, path);
-                updateBreadcrumb(path);
+                updateBreadcrumb(currentRepo, path);
             } catch (error) {
                 contentDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
             }
@@ -252,7 +349,6 @@
         function displayContents(items, path) {
             const contentDiv = document.getElementById('content');
             
-            // Sort: directories first, then files
             items.sort((a, b) => {
                 if (a.type === b.type) return a.name.localeCompare(b.name);
                 return a.type === 'dir' ? -1 : 1;
@@ -260,7 +356,6 @@
 
             let html = '<div class="file-list">';
 
-            // Add back button if not at root
             if (path) {
                 html += `
                     <div class="file-item">
@@ -307,11 +402,18 @@
             fetchRepoContents(currentPath);
         }
 
-        function updateBreadcrumb(path) {
+        function updateBreadcrumb(repo, path) {
             const breadcrumb = document.getElementById('breadcrumb');
+            
+            if (!repo) {
+                breadcrumb.innerHTML = `<span>${REPO_OWNER}'s Repositories</span>`;
+                return;
+            }
+
             const parts = path ? path.split('/') : [];
             
-            let html = `<a href="#" onclick="fetchRepoContents(''); return false;">${REPO_NAME}</a>`;
+            let html = `<a href="#" onclick="loadRepositories(); return false;">${REPO_OWNER}</a>`;
+            html += ` / <a href="#" onclick="openRepository('${repo}'); return false;">${repo}</a>`;
             
             let currentPath = '';
             parts.forEach((part, index) => {
@@ -354,15 +456,13 @@
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         }
 
-        // Initialize on page load
         if (REPO_OWNER) {
             loadRepositories();
         } else {
             document.getElementById('content').innerHTML = `
                 <div class="error">
                     <p><strong>Configuration Required</strong></p>
-                    <p>Please update the REPO_OWNER and REPO_NAME variables in the script section with your GitHub username and repository name.</p>
-                    <p>Example: REPO_OWNER = 'username', REPO_NAME = 'repository-name'</p>
+                    <p>Unable to detect repository owner from URL. Please ensure you're accessing this from a GitHub Pages URL.</p>
                 </div>
             `;
         }
