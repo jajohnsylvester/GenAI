@@ -1,7 +1,385 @@
-c<ol>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repository Contents</title>
+    <style>
+        :root {
+            --color-background: rgba(252, 252, 249, 1);
+            --color-surface: rgba(255, 255, 253, 1);
+            --color-text: rgba(19, 52, 59, 1);
+            --color-text-secondary: rgba(98, 108, 113, 1);
+            --color-primary: rgba(33, 128, 141, 1);
+            --color-primary-hover: rgba(29, 116, 128, 1);
+            --color-border: rgba(94, 82, 64, 0.2);
+            --color-card-border: rgba(94, 82, 64, 0.12);
+            --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            --radius-base: 8px;
+            --radius-lg: 12px;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-background: rgba(31, 33, 33, 1);
+                --color-surface: rgba(38, 40, 40, 1);
+                --color-text: rgba(245, 245, 245, 1);
+                --color-text-secondary: rgba(167, 169, 169, 0.7);
+                --color-primary: rgba(50, 184, 198, 1);
+                --color-primary-hover: rgba(45, 166, 178, 1);
+                --color-border: rgba(119, 124, 124, 0.3);
+                --color-card-border: rgba(119, 124, 124, 0.2);
+            }
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-family-base);
+            background-color: var(--color-background);
+            color: var(--color-text);
+            line-height: 1.6;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--color-text);
+        }
+
+        .repo-info {
+            color: var(--color-text-secondary);
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+
+        .repo-info a {
+            color: var(--color-primary);
+            text-decoration: none;
+        }
+
+        .repo-info a:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumb {
+            background: var(--color-surface);
+            padding: 1rem;
+            border-radius: var(--radius-base);
+            border: 1px solid var(--color-card-border);
+            margin-bottom: 1rem;
+            font-family: var(--font-family-mono);
+            font-size: 0.9rem;
+        }
+
+        .breadcrumb a {
+            color: var(--color-primary);
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--color-text-secondary);
+        }
+
+        .error {
+            background: rgba(192, 21, 47, 0.1);
+            color: rgba(192, 21, 47, 1);
+            padding: 1rem;
+            border-radius: var(--radius-base);
+            border: 1px solid rgba(192, 21, 47, 0.25);
+        }
+
+        .file-list {
+            background: var(--color-surface);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--color-card-border);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--color-border);
+            transition: background 0.2s;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-item:hover {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .file-item:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+        }
+
+        .file-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .file-name {
+            flex: 1;
+            color: var(--color-text);
+            text-decoration: none;
+            font-family: var(--font-family-mono);
+            font-size: 0.9rem;
+        }
+
+        .file-name:hover {
+            color: var(--color-primary);
+        }
+
+        .file-size {
+            color: var(--color-text-secondary);
+            font-size: 0.85rem;
+            margin-left: 1rem;
+        }
+
+        .back-button {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: var(--color-primary);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--radius-base);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .back-button:hover {
+            background: var(--color-primary-hover);
+        }
+    </style>
+</head>
+<body>
+
+    <ol>
 <li>AGI Sinan Ozdemir : <a href="https://github.com/sinanuozdemir/oreilly-agi">https://github.com/sinanuozdemir/oreilly-agi</a></li>
 <li>Deep Learning with Tensorflow , Keras, Pytorch -&gt; JonKrohn : <a href="https://github.com/jonkrohn/DLTFpT">https://github.com/jonkrohn/DLTFpT</a></li>
 <li>Personal Perplexity App Source code : <a href="https://github.com/jajohnsylvester/streamlit">https://github.com/jajohnsylvester/streamlit</a></li> 
 <li>Perplexity App : <a href="https://mypersonalstream.streamlit.app/">https://mypersonalstream.streamlit.app/</a> </li> 
 <li>Personal Expense Tracker : <a href="https://github.com/jajohnsylvester/studio">https://github.com/jajohnsylvester/studio</a></li>
 </ol>
+  
+    <div class="container">
+        <h1 id="repo-name">Repository Contents</h1>
+        <div class="repo-info">
+            <span id="repo-description"></span>
+            <a id="repo-link" href="" target="_blank" rel="noopener noreferrer"></a>
+        </div>
+
+        <div class="breadcrumb" id="breadcrumb"></div>
+
+        <div id="content">
+            <div class="loading">Loading repository contents...</div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-detect repository from current URL
+        const currentUrl = window.location.href;
+        const pathParts = currentUrl.split('/');
+        const githubIndex = pathParts.indexOf('github.io');
+        
+        let REPO_OWNER = '';
+        let REPO_NAME = '';
+        
+        if (githubIndex !== -1) {
+            REPO_OWNER = pathParts[githubIndex - 1].replace('https:', '').replace('//', '');
+            // Try to get repo name from path or use username.github.io
+            if (pathParts[githubIndex + 1]) {
+                REPO_NAME = pathParts[githubIndex + 1];
+            } else {
+                REPO_NAME = REPO_OWNER + '.github.io';
+            }
+        }
+
+        let currentPath = '';
+
+        async function fetchRepoContents(path = '') {
+            const contentDiv = document.getElementById('content');
+            contentDiv.innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch repository contents: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                // Fetch repo info if at root
+                if (!path) {
+                    const repoResponse = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`);
+                    const repoData = await repoResponse.json();
+                    
+                    document.getElementById('repo-name').textContent = repoData.name;
+                    document.getElementById('repo-description').textContent = repoData.description || '';
+                    const repoLink = document.getElementById('repo-link');
+                    repoLink.href = repoData.html_url;
+                    repoLink.textContent = 'View on GitHub →';
+                }
+
+                displayContents(data, path);
+                updateBreadcrumb(path);
+            } catch (error) {
+                contentDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        function displayContents(items, path) {
+            const contentDiv = document.getElementById('content');
+            
+            // Sort: directories first, then files
+            items.sort((a, b) => {
+                if (a.type === b.type) return a.name.localeCompare(b.name);
+                return a.type === 'dir' ? -1 : 1;
+            });
+
+            let html = '<div class="file-list">';
+
+            // Add back button if not at root
+            if (path) {
+                html += `
+                    <div class="file-item">
+                        <svg class="file-icon" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z" transform="rotate(180 8 8)"/>
+                        </svg>
+                        <a href="#" class="file-name" onclick="goBack(); return false;">..</a>
+                    </div>
+                `;
+            }
+
+            items.forEach(item => {
+                const icon = item.type === 'dir' ? getFolderIcon() : getFileIcon(item.name);
+                const size = item.size ? formatBytes(item.size) : '';
+                
+                html += `
+                    <div class="file-item">
+                        ${icon}
+                        <a href="#${item.path}" class="file-name" onclick="handleClick('${item.type}', '${item.path}', '${item.download_url || ''}'); return false;">
+                            ${item.name}
+                        </a>
+                        ${size ? `<span class="file-size">${size}</span>` : ''}
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            contentDiv.innerHTML = html;
+        }
+
+        function handleClick(type, path, downloadUrl) {
+            if (type === 'dir') {
+                currentPath = path;
+                fetchRepoContents(path);
+            } else {
+                window.open(downloadUrl, '_blank');
+            }
+        }
+
+        function goBack() {
+            const parts = currentPath.split('/');
+            parts.pop();
+            currentPath = parts.join('/');
+            fetchRepoContents(currentPath);
+        }
+
+        function updateBreadcrumb(path) {
+            const breadcrumb = document.getElementById('breadcrumb');
+            const parts = path ? path.split('/') : [];
+            
+            let html = `<a href="#" onclick="fetchRepoContents(''); return false;">${REPO_NAME}</a>`;
+            
+            let currentPath = '';
+            parts.forEach((part, index) => {
+                currentPath += (index > 0 ? '/' : '') + part;
+                const pathToNavigate = currentPath;
+                html += ` / <a href="#${pathToNavigate}" onclick="fetchRepoContents('${pathToNavigate}'); return false;">${part}</a>`;
+            });
+            
+            breadcrumb.innerHTML = html;
+        }
+
+        function getFolderIcon() {
+            return `
+                <svg class="file-icon" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/>
+                </svg>
+            `;
+        }
+
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const color = ext === 'html' ? '#e34c26' : 
+                         ext === 'css' ? '#563d7c' : 
+                         ext === 'js' ? '#f1e05a' : 
+                         ext === 'md' ? '#083fa1' : 
+                         'currentColor';
+            
+            return `
+                <svg class="file-icon" viewBox="0 0 16 16" fill="${color}">
+                    <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75z"/>
+                </svg>
+            `;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // Initialize on page load
+        if (REPO_OWNER && REPO_NAME) {
+            fetchRepoContents();
+        } else {
+            document.getElementById('content').innerHTML = `
+                <div class="error">
+                    <p><strong>Configuration Required</strong></p>
+                    <p>Please update the REPO_OWNER and REPO_NAME variables in the script section with your GitHub username and repository name.</p>
+                    <p>Example: REPO_OWNER = 'jajohnsylvester', REPO_NAME = 'GenAI'</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
