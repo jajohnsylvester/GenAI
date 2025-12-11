@@ -282,7 +282,7 @@
         }
 
         .tooltip {
-            position: absolute;
+            position: fixed;
             background: var(--color-surface);
             border: 2px solid transparent;
             background-image: linear-gradient(var(--color-surface), var(--color-surface)), 
@@ -398,7 +398,6 @@
 
                 const repos = await response.json();
                 
-                // Filter public repos
                 const publicRepos = repos.filter(repo => !repo.private);
 
                 document.getElementById('repo-name').textContent = `${REPO_OWNER}'s Repositories`;
@@ -420,10 +419,13 @@
             let html = '<div class="repo-grid">';
 
             repos.forEach(repo => {
+                const repoNameEscaped = repo.name.replace(/'/g, "\\'");
                 html += `
-                    <div class="repo-card" onclick="openRepository('${repo.name}')" 
-                         onmouseenter="showReadmeTooltip(event, '${repo.name}')"
-                         onmouseleave="hideTooltip()">
+                    <div class="repo-card" 
+                         onclick="event.stopPropagation(); openRepository('${repoNameEscaped}')"
+                         onmouseenter="showReadmeTooltip(event, '${repoNameEscaped}')"
+                         onmouseleave="hideTooltip()"
+                         onmousemove="updateTooltipPosition(event)">
                         <div class="repo-card-title">${repo.name}</div>
                         <div class="repo-card-description">${repo.description || 'No description'}</div>
                         <div class="repo-card-meta">
@@ -501,11 +503,13 @@
             items.forEach(item => {
                 const icon = item.type === 'dir' ? getFolderIcon() : getFileIcon(item.name);
                 const size = item.size ? formatBytes(item.size) : '';
+                const pathEscaped = (item.path || '').replace(/'/g, "\\'");
+                const downloadUrlEscaped = (item.download_url || '').replace(/'/g, "\\'");
                 
                 html += `
                     <div class="file-item">
                         ${icon}
-                        <a href="#${item.path}" class="file-name" onclick="handleClick('${item.type}', '${item.path}', '${item.download_url || ''}'); return false;">
+                        <a href="#${item.path}" class="file-name" onclick="handleClick('${item.type}', '${pathEscaped}', '${downloadUrlEscaped}'); return false;">
                             ${item.name}
                         </a>
                         ${size ? `<span class="file-size">${size}</span>` : ''}
@@ -546,10 +550,10 @@
             let html = `<a href="#" onclick="loadRepositories(); return false;">${REPO_OWNER}</a>`;
             html += ` / <a href="#" onclick="openRepository('${repo}'); return false;">${repo}</a>`;
             
-            let currentPath = '';
+            let pathSoFar = '';
             parts.forEach((part, index) => {
-                currentPath += (index > 0 ? '/' : '') + part;
-                const pathToNavigate = currentPath;
+                pathSoFar += (index > 0 ? '/' : '') + part;
+                const pathToNavigate = pathSoFar;
                 html += ` / <a href="#${pathToNavigate}" onclick="fetchRepoContents('${pathToNavigate}'); return false;">${part}</a>`;
             });
             
@@ -587,7 +591,10 @@
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         }
 
+        let currentTooltipRepo = null;
+
         async function showReadmeTooltip(event, repoName) {
+            currentTooltipRepo = repoName;
             const tooltip = document.getElementById('tooltip');
             const tooltipContent = document.getElementById('tooltip-content');
             
@@ -597,14 +604,14 @@
                     return; // No README exists
                 }
                 tooltipContent.textContent = readmeCache[repoName];
-                positionTooltip(event, tooltip);
+                positionTooltip(event);
                 tooltip.classList.add('visible');
                 return;
             }
 
             // Try to fetch README
             try {
-                const readmeVariants = ['README.md', 'Readme.md', 'readme.md', 'README.txt', 'Readme.txt', 'readme.txt', 'README'];
+                const readmeVariants = ['README.txt', 'Readme.txt', 'readme.txt', 'README.md', 'Readme.md', 'readme.md', 'README'];
                 let readmeContent = null;
 
                 for (const variant of readmeVariants) {
@@ -623,7 +630,7 @@
                     }
                 }
 
-                if (readmeContent) {
+                if (readmeContent && currentTooltipRepo === repoName) {
                     // Limit content length for tooltip
                     const maxLength = 500;
                     const displayContent = readmeContent.length > maxLength 
@@ -632,7 +639,7 @@
                     
                     readmeCache[repoName] = displayContent;
                     tooltipContent.textContent = displayContent;
-                    positionTooltip(event, tooltip);
+                    positionTooltip(event);
                     tooltip.classList.add('visible');
                 } else {
                     readmeCache[repoName] = null; // Mark as no README
@@ -642,27 +649,34 @@
             }
         }
 
-        function positionTooltip(event, tooltip) {
-            const card = event.currentTarget;
-            const cardRect = card.getBoundingClientRect();
+        function positionTooltip(event) {
+            const tooltip = document.getElementById('tooltip');
+            const offset = 15;
             
-            // Position tooltip to the right of the card
-            tooltip.style.left = (cardRect.right + 10) + 'px';
-            tooltip.style.top = cardRect.top + 'px';
+            tooltip.style.left = (event.clientX + offset) + 'px';
+            tooltip.style.top = (event.clientY + offset) + 'px';
             
             // Check if tooltip goes off screen and adjust
             setTimeout(() => {
                 const tooltipRect = tooltip.getBoundingClientRect();
                 if (tooltipRect.right > window.innerWidth) {
-                    tooltip.style.left = (cardRect.left - tooltipRect.width - 10) + 'px';
+                    tooltip.style.left = (event.clientX - tooltipRect.width - offset) + 'px';
                 }
                 if (tooltipRect.bottom > window.innerHeight) {
-                    tooltip.style.top = (window.innerHeight - tooltipRect.height - 10) + 'px';
+                    tooltip.style.top = (event.clientY - tooltipRect.height - offset) + 'px';
                 }
             }, 0);
         }
 
+        function updateTooltipPosition(event) {
+            const tooltip = document.getElementById('tooltip');
+            if (tooltip.classList.contains('visible')) {
+                positionTooltip(event);
+            }
+        }
+
         function hideTooltip() {
+            currentTooltipRepo = null;
             const tooltip = document.getElementById('tooltip');
             tooltip.classList.remove('visible');
         }
