@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Repository Contents</title>
+    <title>Jajohnsylvester - Repositories</title>
     <style>
         :root {
             --color-background: rgba(252, 252, 249, 1);
@@ -163,26 +163,11 @@
             font-size: 0.85rem;
             margin-left: 1rem;
         }
-
-        .back-button {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            background: var(--color-primary);
-            color: white;
-            text-decoration: none;
-            border-radius: var(--radius-base);
-            font-size: 0.9rem;
-            margin-bottom: 1rem;
-        }
-
-        .back-button:hover {
-            background: var(--color-primary-hover);
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 id="repo-name">Repository Contents</h1>
+        <h1 id="repo-name">Repositories</h1>
         <div class="repo-info">
             <span id="repo-description"></span>
             <a id="repo-link" href="" target="_blank" rel="noopener noreferrer"></a>
@@ -191,65 +176,123 @@
         <div class="breadcrumb" id="breadcrumb"></div>
 
         <div id="content">
-            <div class="loading">Loading repository contents...</div>
+            <div class="loading">Loading...</div>
         </div>
     </div>
 
     <script>
-        // Auto-detect repository from current URL
-        const currentUrl = window.location.href;
-        const pathParts = currentUrl.split('/');
-        const githubIndex = pathParts.indexOf('github.io');
-        
-        let REPO_OWNER = 'jajohnsylvester';
-        let REPO_NAME = 'GenAI';
-        
-        if (githubIndex !== -1) {
-            REPO_OWNER = pathParts[githubIndex - 1].replace('https:', '').replace('//', '');
-            // Try to get repo name from path or use username.github.io
-            if (pathParts[githubIndex + 1]) {
-                REPO_NAME = pathParts[githubIndex + 1];
-            } else {
-                REPO_NAME = REPO_OWNER + '.github.io';
-            }
-        }
-
+        const REPO_OWNER = 'jajohnsylvester';
+        let currentRepo = null; // Null means we are viewing the repo list
         let currentPath = '';
 
-        async function fetchRepoContents(path = '') {
+        // Initial Load
+        window.addEventListener('DOMContentLoaded', () => {
+            fetchRepositories();
+        });
+
+        // 1. Fetch List of Repositories
+        async function fetchRepositories() {
+            currentRepo = null;
+            currentPath = '';
+            
+            // UI Updates for User Profile View
+            document.getElementById('repo-name').textContent = REPO_OWNER;
+            document.getElementById('repo-description').textContent = 'Public Repositories';
+            const repoLink = document.getElementById('repo-link');
+            repoLink.href = `https://github.com/${REPO_OWNER}`;
+            repoLink.textContent = 'View Profile on GitHub →';
+            
+            updateBreadcrumb();
+            
             const contentDiv = document.getElementById('content');
-            contentDiv.innerHTML = '<div class="loading">Loading...</div>';
+            contentDiv.innerHTML = '<div class="loading">Loading repositories...</div>';
 
             try {
-                const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${path}`;
+                // Get repos sorted by last updated
+                const url = `https://api.github.com/users/${REPO_OWNER}/repos?sort=updated&per_page=100`;
                 const response = await fetch(url);
 
                 if (!response.ok) {
-                    throw new Error(`Failed to fetch repository contents: ${response.statusText}`);
+                    throw new Error(`Failed to fetch repositories: ${response.statusText}`);
                 }
 
-                const data = await response.json();
-                
-                // Fetch repo info if at root
-                if (!path) {
-                    const repoResponse = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`);
-                    const repoData = await repoResponse.json();
-                    
-                    document.getElementById('repo-name').textContent = repoData.name;
-                    document.getElementById('repo-description').textContent = repoData.description || '';
-                    const repoLink = document.getElementById('repo-link');
-                    repoLink.href = repoData.html_url;
-                    repoLink.textContent = 'View on GitHub →';
-                }
-
-                displayContents(data, path);
-                updateBreadcrumb(path);
+                const repos = await response.json();
+                displayRepositories(repos);
             } catch (error) {
                 contentDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
             }
         }
 
-        function displayContents(items, path) {
+        // 2. Display List of Repositories
+        function displayRepositories(repos) {
+            const contentDiv = document.getElementById('content');
+            
+            if (repos.length === 0) {
+                contentDiv.innerHTML = '<div class="loading">No public repositories found.</div>';
+                return;
+            }
+
+            let html = '<div class="file-list">';
+
+            repos.forEach(repo => {
+                const icon = getRepoIcon();
+                const language = repo.language ? repo.language : '';
+                
+                html += `
+                    <div class="file-item">
+                        ${icon}
+                        <a href="#" class="file-name" onclick="enterRepo('${repo.name}', '${repo.description || ''}', '${repo.html_url}'); return false;">
+                            ${repo.name}
+                        </a>
+                        ${language ? `<span class="file-size">${language}</span>` : ''}
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            contentDiv.innerHTML = html;
+        }
+
+        // 3. Enter a specific Repository
+        function enterRepo(repoName, description, htmlUrl) {
+            currentRepo = repoName;
+            currentPath = '';
+            
+            // Update Header for Repo View
+            document.getElementById('repo-name').textContent = repoName;
+            document.getElementById('repo-description').textContent = description;
+            const repoLink = document.getElementById('repo-link');
+            repoLink.href = htmlUrl;
+            repoLink.textContent = 'View on GitHub →';
+            
+            fetchRepoContents('');
+        }
+
+        // 4. Fetch Contents of a Repository (File Browser)
+        async function fetchRepoContents(path = '') {
+            const contentDiv = document.getElementById('content');
+            contentDiv.innerHTML = '<div class="loading">Loading...</div>';
+            currentPath = path;
+
+            updateBreadcrumb();
+
+            try {
+                const url = `https://api.github.com/repos/${REPO_OWNER}/${currentRepo}/contents/${path}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch contents: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayContents(Array.isArray(data) ? data : [data]);
+            } catch (error) {
+                contentDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        // 5. Display Files/Folders
+        function displayContents(items) {
             const contentDiv = document.getElementById('content');
             
             // Sort: directories first, then files
@@ -260,17 +303,17 @@
 
             let html = '<div class="file-list">';
 
-            // Add back button if not at root
-            if (path) {
-                html += `
-                    <div class="file-item">
-                        <svg class="file-icon" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z" transform="rotate(180 8 8)"/>
-                        </svg>
-                        <a href="#" class="file-name" onclick="goBack(); return false;">..</a>
-                    </div>
-                `;
-            }
+            // Logic for ".." (Back) button
+            // If currentPath is empty, ".." goes back to Repo List. 
+            // If currentPath is not empty, ".." goes to parent folder.
+            html += `
+                <div class="file-item">
+                    <svg class="file-icon" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z" transform="rotate(180 8 8)"/>
+                    </svg>
+                    <a href="#" class="file-name" onclick="goBack(); return false;">..</a>
+                </div>
+            `;
 
             items.forEach(item => {
                 const icon = item.type === 'dir' ? getFolderIcon() : getFileIcon(item.name);
@@ -279,7 +322,7 @@
                 html += `
                     <div class="file-item">
                         ${icon}
-                        <a href="#${item.path}" class="file-name" onclick="handleClick('${item.type}', '${item.path}', '${item.download_url || ''}'); return false;">
+                        <a href="#${item.path}" class="file-name" onclick="handleItemClick('${item.type}', '${item.path}', '${item.download_url || ''}'); return false;">
                             ${item.name}
                         </a>
                         ${size ? `<span class="file-size">${size}</span>` : ''}
@@ -291,9 +334,8 @@
             contentDiv.innerHTML = html;
         }
 
-        function handleClick(type, path, downloadUrl) {
+        function handleItemClick(type, path, downloadUrl) {
             if (type === 'dir') {
-                currentPath = path;
                 fetchRepoContents(path);
             } else {
                 window.open(downloadUrl, '_blank');
@@ -301,71 +343,45 @@
         }
 
         function goBack() {
-            const parts = currentPath.split('/');
-            parts.pop();
-            currentPath = parts.join('/');
-            fetchRepoContents(currentPath);
+            if (!currentPath) {
+                // If at root of a repo, go back to repo list
+                fetchRepositories();
+            } else {
+                // Go to parent directory
+                const parts = currentPath.split('/');
+                parts.pop();
+                const newPath = parts.join('/');
+                fetchRepoContents(newPath);
+            }
         }
 
-        function updateBreadcrumb(path) {
+        function updateBreadcrumb() {
             const breadcrumb = document.getElementById('breadcrumb');
-            const parts = path ? path.split('/') : [];
             
-            let html = `<a href="#" onclick="fetchRepoContents(''); return false;">${REPO_NAME}</a>`;
+            // Base: Link to User Repos
+            let html = `<a href="#" onclick="fetchRepositories(); return false;">${REPO_OWNER}</a>`;
             
-            let currentPath = '';
-            parts.forEach((part, index) => {
-                currentPath += (index > 0 ? '/' : '') + part;
-                const pathToNavigate = currentPath;
-                html += ` / <a href="#${pathToNavigate}" onclick="fetchRepoContents('${pathToNavigate}'); return false;">${part}</a>`;
-            });
+            if (currentRepo) {
+                // Add Repo Name
+                html += ` / <a href="#" onclick="enterRepo('${currentRepo}','',''); return false;">${currentRepo}</a>`;
+                
+                // Add Path parts
+                if (currentPath) {
+                    const parts = currentPath.split('/');
+                    let buildPath = '';
+                    parts.forEach((part) => {
+                        buildPath += (buildPath ? '/' : '') + part;
+                        // Closure issue fix: string interpolation ensures value is frozen
+                        html += ` / <a href="#" onclick="fetchRepoContents('${buildPath}'); return false;">${part}</a>`;
+                    });
+                }
+            }
             
             breadcrumb.innerHTML = html;
         }
 
-        function getFolderIcon() {
+        // Icons
+        function getRepoIcon() {
             return `
                 <svg class="file-icon" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/>
-                </svg>
-            `;
-        }
-
-        function getFileIcon(filename) {
-            const ext = filename.split('.').pop().toLowerCase();
-            const color = ext === 'html' ? '#e34c26' : 
-                         ext === 'css' ? '#563d7c' : 
-                         ext === 'js' ? '#f1e05a' : 
-                         ext === 'md' ? '#083fa1' : 
-                         'currentColor';
-            
-            return `
-                <svg class="file-icon" viewBox="0 0 16 16" fill="${color}">
-                    <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75z"/>
-                </svg>
-            `;
-        }
-
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-        }
-
-        // Initialize on page load
-        if (REPO_OWNER) {
-            loadRepositories();
-        } else {
-            document.getElementById('content').innerHTML = `
-                <div class="error">
-                    <p><strong>Configuration Required</strong></p>
-                    <p>Please update the REPO_OWNER and REPO_NAME variables in the script section with your GitHub username and repository name.</p>
-                    <p>Example: REPO_OWNER = 'username', REPO_NAME = 'repository-name'</p>
-                </div>
-            `;
-        }
-    </script>
-</body>
-</html>
+                     <path fill-rule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75
