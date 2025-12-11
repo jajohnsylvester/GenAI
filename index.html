@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>jajohnsylvester - Repositories</title>
+    <style>
+        :root {
+            /* Color Palette - Modern & Clean */
+            --bg-body: #f6f8fa;
+            --bg-card: #ffffff;
+            --text-primary: #24292f;
+            --text-secondary: #57606a;
+            --accent-primary: #0969da;
+            --accent-hover: #0a469a;
+            --border-color: #d0d7de;
+            --code-bg: #f6f8fa;
+            --shadow-card: 0 1px 3px rgba(0,0,0,0.12);
+            --shadow-hover: 0 8px 24px rgba(149, 157, 165, 0.2);
+            
+            /* Language Colors */
+            --lang-js: #f1e05a;
+            --lang-html: #e34c26;
+            --lang-css: #563d7c;
+            --lang-python: #3572A5;
+            --lang-other: #8b949e;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-body: #0d1117;
+                --bg-card: #161b22;
+                --text-primary: #c9d1d9;
+                --text-secondary: #8b949e;
+                --accent-primary: #58a6ff;
+                --accent-hover: #79c0ff;
+                --border-color: #30363d;
+                --code-bg: #161b22;
+                --shadow-card: 0 1px 3px rgba(0,0,0,0.5);
+                --shadow-hover: 0 8px 24px rgba(0,0,0,0.5);
+            }
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            line-height: 1.5;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: 2px solid var(--border-color);
+        }
+
+        h1 { font-size: 1.8rem; font-weight: 600; }
+        .subtitle { color: var(--text-secondary); font-size: 0.95rem; }
+
+        /* Navigation */
+        .breadcrumb {
+            background: var(--bg-card);
+            padding: 0.8rem 1.2rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .breadcrumb a {
+            color: var(--accent-primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .breadcrumb a:hover { text-decoration: underline; }
+        .breadcrumb span { color: var(--text-secondary); }
+
+        /* Grid for Repositories */
+        .repo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .repo-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-card);
+        }
+
+        .repo-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-hover);
+            border-color: var(--accent-primary);
+        }
+
+        .repo-title {
+            font-weight: 600;
+            color: var(--accent-primary);
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            word-break: break-word;
+        }
+
+        .repo-desc {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            flex-grow: 1;
+            margin-bottom: 1rem;
+            line-height: 1.4;
+        }
+
+        .repo-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: auto;
+        }
+
+        .lang-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        /* File List Styles */
+        .file-list {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.1s;
+            cursor: pointer;
+        }
+
+        .file-item:last-child { border-bottom: none; }
+        .file-item:hover { background-color: rgba(0,0,0,0.03); }
+
+        .file-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .folder-icon { color: #54aeff; fill: currentColor; }
+
+        .file-name {
+            flex: 1;
+            color: var(--text-primary);
+            text-decoration: none;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.9rem;
+        }
+        .file-item:hover .file-name { color: var(--accent-primary); }
+
+        .file-size { font-size: 0.8rem; color: var(--text-secondary); }
+
+        /* File Content Viewer */
+        .file-viewer {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .viewer-header {
+            padding: 0.8rem 1rem;
+            background: var(--bg-body);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn-back {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .btn-back:hover { background-color: rgba(0,0,0,0.05); }
+
+        .code-block {
+            padding: 1rem;
+            margin: 0;
+            overflow-x: auto;
+            background: var(--code-bg);
+            color: var(--text-primary);
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+        }
+
+        /* Media Viewer Styles */
+        .media-container {
+            padding: 1rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+        }
+
+        .media-container video {
+            max-width: 100%;
+            max-height: 70vh;
+            border-radius: 4px;
+        }
+
+        .media-container iframe {
+            width: 100%;
+            height: 70vh;
+            border: none;
+            border-radius: 4px;
+        }
+
+        .notebook-container {
+            padding: 1rem;
+            overflow-x: auto;
+        }
+
+        .notebook-cell {
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .notebook-cell-type {
+            padding: 0.5rem 1rem;
+            background: var(--bg-body);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .notebook-cell-content {
+            padding: 1rem;
+            background: var(--bg-card);
+        }
+
+        .notebook-cell-content pre {
+            margin: 0;
+            overflow-x: auto;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.9rem;
+        }
+
+        /* Utilities */
+        .loading { padding: 3rem; text-align: center; color: var(--text-secondary); }
+        .error { 
+            background: rgba(207, 34, 46, 0.1); 
+            color: #cf222e; 
+            padding: 1rem; 
+            border-radius: 6px; 
+            border: 1px solid rgba(207, 34, 46, 0.2); 
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img id="avatar" class="header-avatar" src="https://github.com/github.png" alt="User">
+            <div>
+                <h1 id="page-title">Loading...</h1>
+                <div class="subtitle">Public Repository Browser</div>
+            </div>
+        </header>
+
+        <div class="breadcrumb" id="breadcrumb"></div>
+
+        <div id="content">
+            <div class="loading">Loading...</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script>
+        // --- CONFIGURATION ---
+        const DEFAULT_USER = 'jajohnsylvester';
+        
+        // Auto-detect or use default
+        let REPO_OWNER = DEFAULT_USER;
+        const urlParts = window.location.href.split('/');
+        const ghIndex = urlParts.indexOf('github.io');
+        if (ghIndex !== -1) {
+            REPO_OWNER = urlParts[ghIndex - 1].replace('https:', '').replace('//', '');
+        }
+
+        // State
+        let currentRepo = null;
+        let currentPath = '';
+        let isViewingFile = false;
+
+        // Language Color Map
+        const colors = {
+            'JavaScript': '#f1e05a', 'HTML': '#e34c26', 'CSS': '#563d7c',
+            'Python': '#3572A5', 'Java': '#b07219', 'Shell': '#89e051',
+            'TypeScript': '#2b7489'
+        };
+
+        // Icons
+        const ICONS = {
+            folder: `<svg class="file-icon folder-icon" viewBox="0 0 16 16"><path fill="currentColor" d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"></path></svg>`,
+            file: `<svg class="file-icon" viewBox="0 0 16 16"><path fill="currentColor" d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75z"></path></svg>`,
+            back: `<svg class="file-icon" viewBox="0 0 16 16" style="transform: rotate(180deg)"><path fill="currentColor" d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"></path></svg>`
+        };
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('page-title').textContent = REPO_OWNER;
+            fetchRepos();
+        });
+
+        // --- API FUNCTIONS ---
+
+        async function fetchRepos() {
+            renderLoading();
+            currentRepo = null;
+            currentPath = '';
+            isViewingFile = false;
+            
+            try {
+                const res = await fetch(`https://api.github.com/users/${REPO_OWNER}/repos?sort=updated&per_page=100`);
+                if (!res.ok) throw new Error('Failed to load repositories');
+                
+                const repos = await res.json();
+                
+                if(repos.length > 0) document.getElementById('avatar').src = repos[0].owner.avatar_url;
+                
+                renderRepoList(repos);
+                updateBreadcrumb();
+            } catch (err) {
+                renderError(err.message);
+            }
+        }
+
+        async function fetchContents(repoName, path = '') {
+            renderLoading();
+            currentRepo = repoName;
+            currentPath = path;
+            isViewingFile = false;
+
+            try {
+                const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${repoName}/contents/${path}`);
+                if (!res.ok) throw new Error(`Could not access content.`);
+                
+                const data = await res.json();
+                renderFileList(data);
+                updateBreadcrumb();
+            } catch (err) {
+                renderError(err.message);
+            }
+        }
+
+        async function viewFile(fileName, downloadUrl) {
+            renderLoading();
+            isViewingFile = true;
+            
+            const ext = fileName.split('.').pop().toLowerCase();
+            
+            // Handle different file types
+            if (ext === 'mp4' || ext === 'webm' || ext === 'ogg') {
+                renderVideoViewer(fileName, downloadUrl);
+            } else if (ext === 'pdf') {
+                renderPDFViewer(fileName, downloadUrl);
+            } else if (ext === 'docx' || ext === 'doc') {
+                renderWordDocument(fileName, downloadUrl);
+            } else if (ext === 'ipynb') {
+                renderNotebook(fileName, downloadUrl);
+            } else {
+                // Text files
+                const viewable = ['txt', 'md', 'js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'xml', 'yml', 'yaml', 'sh', 'gitignore', 'ts', 'jsx', 'tsx', 'rs', 'go', 'rb'];
+                
+                if (!viewable.includes(ext) && !fileName.toLowerCase().startsWith('license')) {
+                    window.open(downloadUrl, '_blank');
+                    goBack();
+                    return;
+                }
+
+                try {
+                    const res = await fetch(downloadUrl);
+                    if(!res.ok) throw new Error("Failed to fetch file content");
+                    const text = await res.text();
+                    
+                    renderFileContent(fileName, text);
+                } catch(err) {
+                    renderError("Could not display file. " + err.message);
+                }
+            }
+        }
+
+        // --- RENDER FUNCTIONS ---
+
+        function renderRepoList(repos) {
+            const container = document.getElementById('content');
+            if (repos.length === 0) {
+                container.innerHTML = '<div class="error">No public repositories found.</div>';
+                return;
+            }
+
+            let html = '<div class="repo-grid">';
+            
+            repos.forEach(repo => {
+                const langColor = colors[repo.language] || '#8b949e';
+                const langHtml = repo.language 
+                    ? `<span style="display:flex; align-items:center;"><span class="lang-dot" style="background:${langColor}"></span>${repo.language}</span>` 
+                    : '';
+                
+                html += `
+                    <div class="repo-card" onclick="fetchContents('${repo.name}')">
+                        <div class="repo-title">${repo.name}</div>
+                        <div class="repo-desc">${repo.description || 'No description provided.'}</div>
+                        <div class="repo-meta">
+                            ${langHtml}
+                            <span>Last updated: ${new Date(repo.updated_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function renderFileList(items) {
+            const container = document.getElementById('content');
+            
+            const sorted = Array.isArray(items) ? items.sort((a,b) => (a.type === b.type ? 0 : a.type === 'dir' ? -1 : 1)) : [items];
+
+            let html = '<div class="file-list">';
+
+            html += `
+                <div class="file-item" onclick="goBack()">
+                    ${ICONS.back}
+                    <span class="file-name">..</span>
+                </div>
+            `;
+
+            sorted.forEach(item => {
+                const isDir = item.type === 'dir';
+                const icon = isDir ? ICONS.folder : ICONS.file;
+                
+                const action = isDir 
+                    ? `fetchContents('${currentRepo}', '${item.path}')` 
+                    : `viewFile('${item.name}', '${item.download_url}')`;
+
+                html += `
+                    <div class="file-item" onclick="${action}">
+                        ${icon}
+                        <span class="file-name">${item.name}</span>
+                        <span class="file-size">${item.size ? formatBytes(item.size) : ''}</span>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function renderFileContent(fileName, content) {
+            const container = document.getElementById('content');
+            
+            const safeContent = content.replace(/&/g, "&amp;")
+                                       .replace(/</g, "&lt;")
+                                       .replace(/>/g, "&gt;")
+                                       .replace(/"/g, "&quot;")
+                                       .replace(/'/g, "&#039;");
+
+            const html = `
+                <div class="file-viewer">
+                    <div class="viewer-header">
+                        <strong>${fileName}</strong>
+                        <button class="btn-back" onclick="goBack()">Back</button>
+                    </div>
+                    <pre class="code-block"><code>${safeContent}</code></pre>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        function renderVideoViewer(fileName, url) {
+            const container = document.getElementById('content');
+            const html = `
+                <div class="file-viewer">
+                    <div class="viewer-header">
+                        <strong>${fileName}</strong>
+                        <button class="btn-back" onclick="goBack()">Back</button>
+                    </div>
+                    <div class="media-container">
+                        <video controls>
+                            <source src="${url}" type="video/${fileName.split('.').pop()}">
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        function renderPDFViewer(fileName, url) {
+            const container = document.getElementById('content');
+            const html = `
+                <div class="file-viewer">
+                    <div class="viewer-header">
+                        <strong>${fileName}</strong>
+                        <button class="btn-back" onclick="goBack()">Back</button>
+                    </div>
+                    <div class="media-container">
+                        <iframe src="${url}" type="application/pdf"></iframe>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        async function renderWordDocument(fileName, url) {
+            const container = document.getElementById('content');
+            
+            try {
+                const response = await fetch(url);
+                const arrayBuffer = await response.arrayBuffer();
+                
+                const result = await mammoth.convertToHtml({arrayBuffer: arrayBuffer});
+                
+                const html = `
+                    <div class="file-viewer">
+                        <div class="viewer-header">
+                            <strong>${fileName}</strong>
+                            <button class="btn-back" onclick="goBack()">Back</button>
+                        </div>
+                        <div class="media-container" style="display: block; text-align: left;">
+                            <div style="max-width: 800px; margin: 0 auto; padding: 2rem; background: white; color: black; border-radius: 4px;">
+                                ${result.value}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML = html;
+            } catch (err) {
+                renderError("Could not display Word document. " + err.message);
+            }
+        }
+
+        async function renderNotebook(fileName, url) {
+            const container = document.getElementById('content');
+            
+            try {
+                const response = await fetch(url);
+                const notebook = await response.json();
+                
+                let cellsHtml = '';
+                
+                if (notebook.cells && Array.isArray(notebook.cells)) {
+                    notebook.cells.forEach(cell => {
+                        const cellType = cell.cell_type;
+                        const source = Array.isArray(cell.source) ? cell.source.join('') : cell.source;
+                        
+                        let contentHtml = '';
+                        
+                        if (cellType === 'markdown') {
+                            contentHtml = `<div>${source.replace(/\n/g, '<br>')}</div>`;
+                        } else if (cellType === 'code') {
+                            const safeCode = source.replace(/&/g, "&amp;")
+                                                  .replace(/</g, "&lt;")
+                                                  .replace(/>/g, "&gt;");
+                            contentHtml = `<pre>${safeCode}</pre>`;
+                            
+                            // Add outputs if available
+                            if (cell.outputs && cell.outputs.length > 0) {
+                                contentHtml += '<div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">';
+                                cell.outputs.forEach(output => {
+                                    if (output.text) {
+                                        const outText = Array.isArray(output.text) ? output.text.join('') : output.text;
+                                        contentHtml += `<pre style="color: var(--text-secondary);">${outText}</pre>`;
+                                    }
+                                });
+                                contentHtml += '</div>';
+                            }
+                        }
+                        
+                        cellsHtml += `
+                            <div class="notebook-cell">
+                                <div class="notebook-cell-type">${cellType}</div>
+                                <div class="notebook-cell-content">${contentHtml}</div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                const html = `
+                    <div class="file-viewer">
+                        <div class="viewer-header">
+                            <strong>${fileName}</strong>
+                            <button class="btn-back" onclick="goBack()">Back</button>
+                        </div>
+                        <div class="notebook-container">
+                            ${cellsHtml}
+                        </div>
+                    </div>
+                `;
+                container.innerHTML = html;
+            } catch (err) {
+                renderError("Could not display notebook. " + err.message);
+            }
+        }
+
+        // --- UTILS ---
+
+        function goBack() {
+            if (isViewingFile) {
+                fetchContents(currentRepo, currentPath);
+            } else if (!currentPath) {
+                fetchRepos(); 
+            } else {
+                const parts = currentPath.split('/');
+                parts.pop();
+                fetchContents(currentRepo, parts.join('/'));
+            }
+        }
+
+        function updateBreadcrumb() {
+            const b = document.getElementById('breadcrumb');
+            let html = `<a href="#" onclick="fetchRepos(); return false;">Home</a>`;
+            
+            if (currentRepo) {
+                html += ` <span>/</span> <a href="#" onclick="fetchContents('${currentRepo}',''); return false;">${currentRepo}</a>`;
+                
+                if (currentPath) {
+                    const parts = currentPath.split('/');
+                    let build = '';
+                    parts.forEach(p => {
+                        build += (build ? '/' : '') + p;
+                        html += ` <span>/</span> <span style="color:var(--text-secondary)">${p}</span>`;
+                    });
+                }
+            }
+            b.innerHTML = html;
+        }
+
+        function renderLoading() {
+            document.getElementById('content').innerHTML = '<div class="loading">Loading...</div>';
+        }
+
+        function renderError(msg) {
+            document.getElementById('content').innerHTML = `<div class="error">${msg}</div>`;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>
