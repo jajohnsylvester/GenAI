@@ -127,4 +127,293 @@
             color: var(--accent-primary);
             font-size: 1.1rem;
             margin-bottom: 0.5rem;
-            word
+            word-break: break-word;
+        }
+
+        .repo-desc {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            flex-grow: 1;
+            margin-bottom: 1rem;
+            line-height: 1.4;
+        }
+
+        .repo-meta {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: auto;
+        }
+
+        .lang-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        /* File List Styles */
+        .file-list {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.1s;
+            cursor: pointer;
+        }
+
+        .file-item:last-child { border-bottom: none; }
+        .file-item:hover { background-color: rgba(0,0,0,0.03); }
+
+        .file-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .folder-icon { color: #54aeff; fill: currentColor; }
+
+        .file-name {
+            flex: 1;
+            color: var(--text-primary);
+            text-decoration: none;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            font-size: 0.9rem;
+        }
+        .file-item:hover .file-name { color: var(--accent-primary); }
+
+        .file-size { font-size: 0.8rem; color: var(--text-secondary); }
+
+        /* Utilities */
+        .loading { padding: 3rem; text-align: center; color: var(--text-secondary); }
+        .error { 
+            background: rgba(207, 34, 46, 0.1); 
+            color: #cf222e; 
+            padding: 1rem; 
+            border-radius: 6px; 
+            border: 1px solid rgba(207, 34, 46, 0.2); 
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img id="avatar" class="header-avatar" src="https://github.com/github.png" alt="User">
+            <div>
+                <h1 id="page-title">Loading...</h1>
+                <div class="subtitle">Public Repository Browser</div>
+            </div>
+        </header>
+
+        <div class="breadcrumb" id="breadcrumb"></div>
+
+        <div id="content">
+            <div class="loading">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const DEFAULT_USER = 'jajohnsylvester';
+        
+        // Auto-detect or use default
+        let REPO_OWNER = DEFAULT_USER;
+        const urlParts = window.location.href.split('/');
+        const ghIndex = urlParts.indexOf('github.io');
+        if (ghIndex !== -1) {
+            REPO_OWNER = urlParts[ghIndex - 1].replace('https:', '').replace('//', '');
+        }
+
+        // State
+        let currentRepo = null;
+        let currentPath = '';
+
+        // Language Color Map
+        const colors = {
+            'JavaScript': '#f1e05a', 'HTML': '#e34c26', 'CSS': '#563d7c',
+            'Python': '#3572A5', 'Java': '#b07219', 'Shell': '#89e051',
+            'TypeScript': '#2b7489'
+        };
+
+        // Icons
+        const ICONS = {
+            folder: `<svg class="file-icon folder-icon" viewBox="0 0 16 16"><path fill="currentColor" d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5a.25.25 0 01-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"></path></svg>`,
+            file: `<svg class="file-icon" viewBox="0 0 16 16"><path fill="currentColor" d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75z"></path></svg>`,
+            back: `<svg class="file-icon" viewBox="0 0 16 16" style="transform: rotate(180deg)"><path fill="currentColor" d="M8 0L6.59 1.41 12.17 7H0v2h12.17l-5.58 5.59L8 16l8-8z"></path></svg>`
+        };
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('page-title').textContent = REPO_OWNER;
+            fetchRepos();
+        });
+
+        // --- API FUNCTIONS ---
+
+        async function fetchRepos() {
+            renderLoading();
+            currentRepo = null;
+            currentPath = '';
+            
+            try {
+                // Fetch repos sort by last updated
+                const res = await fetch(`https://api.github.com/users/${REPO_OWNER}/repos?sort=updated&per_page=100`);
+                if (!res.ok) throw new Error('Failed to load repositories');
+                
+                const repos = await res.json();
+                
+                // Update Avatar
+                if(repos.length > 0) document.getElementById('avatar').src = repos[0].owner.avatar_url;
+                
+                renderRepoList(repos);
+                updateBreadcrumb();
+            } catch (err) {
+                renderError(err.message);
+            }
+        }
+
+        async function fetchContents(repoName, path = '') {
+            renderLoading();
+            currentRepo = repoName;
+            currentPath = path;
+
+            try {
+                const res = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${repoName}/contents/${path}`);
+                if (!res.ok) throw new Error(`Could not access content.`);
+                
+                const data = await res.json();
+                renderFileList(data);
+                updateBreadcrumb();
+            } catch (err) {
+                renderError(err.message);
+            }
+        }
+
+        // --- RENDER FUNCTIONS ---
+
+        function renderRepoList(repos) {
+            const container = document.getElementById('content');
+            if (repos.length === 0) {
+                container.innerHTML = '<div class="error">No public repositories found.</div>';
+                return;
+            }
+
+            let html = '<div class="repo-grid">';
+            
+            repos.forEach(repo => {
+                const langColor = colors[repo.language] || '#8b949e';
+                const langHtml = repo.language 
+                    ? `<span style="display:flex; align-items:center;"><span class="lang-dot" style="background:${langColor}"></span>${repo.language}</span>` 
+                    : '';
+                
+                html += `
+                    <div class="repo-card" onclick="fetchContents('${repo.name}')">
+                        <div class="repo-title">${repo.name}</div>
+                        <div class="repo-desc">${repo.description || 'No description provided.'}</div>
+                        <div class="repo-meta">
+                            ${langHtml}
+                            <span>Last updated: ${new Date(repo.updated_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function renderFileList(items) {
+            const container = document.getElementById('content');
+            
+            // Sort folders first
+            const sorted = Array.isArray(items) ? items.sort((a,b) => (a.type === b.type ? 0 : a.type === 'dir' ? -1 : 1)) : [items];
+
+            let html = '<div class="file-list">';
+
+            // Back button
+            html += `
+                <div class="file-item" onclick="goBack()">
+                    ${ICONS.back}
+                    <span class="file-name">..</span>
+                </div>
+            `;
+
+            sorted.forEach(item => {
+                const isDir = item.type === 'dir';
+                const icon = isDir ? ICONS.folder : ICONS.file;
+                const action = isDir 
+                    ? `fetchContents('${currentRepo}', '${item.path}')` 
+                    : `window.open('${item.html_url}', '_blank')`;
+
+                html += `
+                    <div class="file-item" onclick="${action}">
+                        ${icon}
+                        <span class="file-name">${item.name}</span>
+                        <span class="file-size">${item.size ? formatBytes(item.size) : ''}</span>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        // --- UTILS ---
+
+        function goBack() {
+            if (!currentPath) {
+                fetchRepos(); // Go to home
+            } else {
+                const parts = currentPath.split('/');
+                parts.pop();
+                fetchContents(currentRepo, parts.join('/'));
+            }
+        }
+
+        function updateBreadcrumb() {
+            const b = document.getElementById('breadcrumb');
+            let html = `<a href="#" onclick="fetchRepos(); return false;">Home</a>`;
+            
+            if (currentRepo) {
+                html += ` <span>/</span> <a href="#" onclick="fetchContents('${currentRepo}',''); return false;">${currentRepo}</a>`;
+                
+                if (currentPath) {
+                    const parts = currentPath.split('/');
+                    let build = '';
+                    parts.forEach(p => {
+                        build += (build ? '/' : '') + p;
+                        html += ` <span>/</span> <span style="color:var(--text-secondary)">${p}</span>`;
+                    });
+                }
+            }
+            b.innerHTML = html;
+        }
+
+        function renderLoading() {
+            document.getElementById('content').innerHTML = '<div class="loading">Loading...</div>';
+        }
+
+        function renderError(msg) {
+            document.getElementById('content').innerHTML = `<div class="error">${msg}</div>`;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>
