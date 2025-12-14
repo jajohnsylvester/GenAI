@@ -1,0 +1,103 @@
+
+[PTPPF]: Private Cloud SQL and Cloud Run
+gcloud compute addresses create google-managed-services-default \
+    --global \
+    --purpose=VPC_PEERING \
+    --prefix-length=20 \
+    --network=default
+
+gcloud services vpc-peerings connect \
+    --service=servicenetworking.googleapis.com \
+    --ranges=google-managed-services-default \
+    --network=default
+------------------------------------------
+gcloud sql instances create menu-catalog \
+--database-version=POSTGRES_15 \
+--region=us-west1 \
+--network=default \
+--no-assign-ip \
+--tier=db-custom-1-3840 \
+--root-password='Password@123'
+
+gcloud sql databases create menu-db \
+    --instance=menu-catalog
+
+gcloud sql users create menu-user \
+    --instance=menu-catalog \
+    --password='Menupassword@123'
+
+gcloud projects add-iam-policy-binding qwiklabs-gcp-03-a1dbe419d335 \
+    --member="serviceAccount:745426464084-compute@developer.gserviceaccount.com" \
+    --role="roles/cloudsql.client"
+-----------------------------------------------------------
+
+gcloud artifacts repositories create container-repo \
+    --repository-format=docker \
+    --location=us-west4 \
+    --immutable-tags \
+    --description="Docker repository"
+	
+----------------------------------------------------------
+# Create the secret wrapper with automatic replication
+gcloud secrets create db-password-secret --replication-policy=automatic
+
+# Add the specific password "Menupassword@123" as a new version
+echo -n "Menupassword@123" | gcloud secrets versions add db-password-secret --data-file=-
+
+# Get Project Number
+PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format="value(projectNumber)")
+
+# Grant the role
+gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+	
+gcloud projects get-iam-policy $(gcloud config get-value project) \
+    --flatten="bindings[].members" \
+    --filter="bindings.role:roles/secretmanager.secretAccessor" \
+    --format="table(bindings.role, bindings.members)"
+	
+------------------------------------------------------------------
+git clone https://github.com/GoogleCloudPlatform/cymbal-eats.git
+cd cymbal-eats/menu-service
+
+mvn clean install -DskipTests
+
+# not working 
+gcloud builds submit --tag us-west1-docker.pkg.dev/$(gcloud config get-value project)/container-repo/cymbal-eats .
+
+#alternative 
+docker build -t us-west1-docker.pkg.dev/$(gcloud config get-value project)/container-repo/cymbal-eats .
+gcloud auth configure-docker us-west1-docker.pkg.dev
+docker push us-west1-docker.pkg.dev/$(gcloud config get-value project)/container-repo/cymbal-eats
+
+
+gcloud sql instances describe menu-catalog \
+    --format='value(ipAddresses.ipAddress)'
+	
+10.33.96.3	
+
+gcloud run deploy menu-service \
+    --image=us-west1-docker.pkg.dev/$(gcloud config get-value project)/container-repo/cymbal-eats:latest \
+    --region=us-west1 \
+    --allow-unauthenticated \
+    --network=default \
+    --subnet=default \
+    --set-secrets=DB_PASS=db-password-secret:latest \
+    --set-env-vars=DB_USER=menu-user,DB_DATABASE=menu-db,DB_HOST=10.33.96.3
+	
+MENU_SERVICE_URL=$(gcloud run services describe menu-service \
+    --region=us-west1 \
+    --format='value(status.url)')
+
+curl -X POST "$MENU_SERVICE_URL/menu" \
+-H "Content-Type: application/json" \
+-d '{
+  "itemImageURL": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format",
+  "itemName": "Curry Plate",
+  "itemPrice": 12.5,
+  "itemThumbnailURL": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format",
+  "spiceLevel": 3,
+  "status": "Ready",
+  "tagLine": "Spicy touch for your taste buds!!"
+}'

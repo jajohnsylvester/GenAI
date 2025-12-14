@@ -1,0 +1,126 @@
+PTPPF Secure Access to GKE Workloads with Workload Identity 
+gcloud projects list
+gcloud config set project qwiklabs-gcp-00-52933611d0b5 
+
+gcloud container clusters create cepf-lab-cluster \
+  --zone "us-east1-d" \
+  --machine-type "e2-medium" \
+  --num-nodes "3" \
+  --network "default" \
+  --enable-ip-alias \
+  --enable-private-nodes \
+  --master-ipv4-cidr "172.16.0.0/28" \
+  --workload-pool "${GOOGLE_CLOUD_PROJECT}.svc.id.goog" \
+  --shielded-secure-boot \
+  --shielded-integrity-monitoring \
+  --enable-master-authorized-networks \
+  --master-authorized-networks 0.0.0.0/0
+  
+------------------------------------------------------------------------
+
+Bucket creation
+
+-------------------------------------------------------------------------
+
+gcloud container clusters get-credentials cepf-lab-cluster --zone us-east1-d
+
+# Create the namespace
+kubectl create namespace cepf-lab-ns1
+
+# Create the KSA
+kubectl create serviceaccount cepf-lab-ksa1 --namespace cepf-lab-ns1
+
+# Create the IAM Service Account
+gcloud iam service-accounts create cepf-lab-gsa1 --display-name="cepf-lab-gsa1"
+
+# Grant the Storage Admin role
+gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
+    --member "serviceAccount:cepf-lab-gsa1@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+    --role "roles/storage.admin"
+
+# Allow the KSA to impersonate the GSA
+gcloud iam service-accounts add-iam-policy-binding cepf-lab-gsa1@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com \
+    --role roles/iam.workloadIdentityUser \
+    --member "serviceAccount:${GOOGLE_CLOUD_PROJECT}.svc.id.goog[cepf-lab-ns1/cepf-lab-ksa1]"
+
+# Annotate the KSA with the GSA email
+kubectl annotate serviceaccount cepf-lab-ksa1 \
+    --namespace cepf-lab-ns1 \
+    iam.gke.io/gcp-service-account=cepf-lab-gsa1@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com
+
+
+pod.yml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cepf-lab-workload-identity-pod
+  namespace: cepf-lab-ns1
+spec:
+  serviceAccountName: cepf-lab-ksa1
+  containers:
+  - image: google/cloud-sdk:slim
+    name: workload-identity-container
+    command: ["sleep", "infinity"]
+  nodeSelector:
+    iam.gke.io/gke-metadata-server-enabled: "true"
+
+kubectl apply -f pod.yaml
+
+#Verify workload identity is working 
+kubectl exec -it cepf-lab-workload-identity-pod --namespace cepf-lab-ns1 -- gcloud storage ls
+kubectl exec -it cepf-lab-workload-identity-pod --namespace cepf-lab-ns1 -- gcloud compute instances list
+
+---------------------------------------------------------------------------------------------------------------
+
+# Create the new namespace
+kubectl create namespace cepf-lab-ns2
+
+# Create the KSA in the new namespace
+kubectl create serviceaccount cepf-lab-ksa2 --namespace cepf-lab-ns2
+
+# Create the IAM Service Account
+gcloud iam service-accounts create cepf-lab-gsa2 --display-name="cepf-lab-gsa2"
+
+# Grant the Storage Object Viewer role
+gcloud projects add-iam-policy-binding ${GOOGLE_CLOUD_PROJECT} \
+    --member "serviceAccount:cepf-lab-gsa2@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com" \
+    --role "roles/storage.objectViewer"
+	
+# Allow the KSA to impersonate the GSA
+gcloud iam service-accounts add-iam-policy-binding cepf-lab-gsa2@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com \
+    --role roles/iam.workloadIdentityUser \
+    --member "serviceAccount:${GOOGLE_CLOUD_PROJECT}.svc.id.goog[cepf-lab-ns2/cepf-lab-ksa2]"
+
+# Annotate the KSA with the GSA email
+kubectl annotate serviceaccount cepf-lab-ksa2 \
+    --namespace cepf-lab-ns2 \
+    iam.gke.io/gcp-service-account=cepf-lab-gsa2@${GOOGLE_CLOUD_PROJECT}.iam.gserviceaccount.com
+
+
+pod-ns2.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cepf-lab-workload-identity-pod
+  namespace: cepf-lab-ns2
+spec:
+  serviceAccountName: cepf-lab-ksa2
+  containers:
+  - image: google/cloud-sdk:slim
+    name: workload-identity-container
+    command: ["sleep", "infinity"]
+  nodeSelector:
+    iam.gke.io/gke-metadata-server-enabled: "true"
+	
+kubectl apply -f pod-ns2.yaml
+
+## Wont work 
+kubectl exec -it cepf-lab-workload-identity-pod --namespace cepf-lab-ns2 -- gcloud storage ls
+
+## wont work 
+kubectl exec -it cepf-lab-workload-identity-pod --namespace cepf-lab-ns2 -- gcloud storage ls gs://qwiklabs-gcp-00-52933611d0b5-bucket
+
+## Use the following to check
+kubectl exec -it cepf-lab-workload-identity-pod --namespace cepf-lab-ns2 -- gcloud config list account
