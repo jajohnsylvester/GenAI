@@ -17,6 +17,9 @@ Give me a streamlit app code by first downloading the data from yahoo finance fo
 
 https://invesstrategy.streamlit.app/
 ---------------------------------------------------------------------------------------------------------
-Real-Time Data Feeds and Model Updating for Portfolio Management
+Real-Time Data Feeds and Model Updating for Portfolio Management 
+Note : Alpha Advantage API doesnt provide Free Intraday data. It is available for premium only.
 
 Give a streamlit app code which will get real time data of Indian stock received as input and data using Alpha Advantage API. Display  the real time data using plotly 
+
+https://rtstock.streamlit.app/
