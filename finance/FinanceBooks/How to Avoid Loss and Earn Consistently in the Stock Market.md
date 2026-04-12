@@ -75,3 +75,44 @@ The core philosophy revolves around Fundamental Analysis and Risk Mitigation.
     Learn from Mistakes: Every loss is a tuition fee paid to the market; analyze why you lost money to avoid repeating it.
 
     Consistency: Systematic, disciplined investing beats brilliant but sporadic flashes of luck.
+
+Based on the "Quick Formula" by Prasenjit Paul detailed in your images, I have translated the criteria into a functional query for **Screener.in**.
+
+The formula consists of a primary screening stage (efficiency, debt, and growth) followed by secondary checks for valuation and price momentum.
+
+### **Screener.in Query**
+Copy and paste the following into the "Query" box on the Screener.in "Create New Screen" page:
+
+```sql
+Average return on equity 3Years > 20 AND 
+Average return on capital employed 3Years > 20 AND 
+Debt to equity < 1 AND 
+Pledged percentage < 10 AND 
+Sales growth 3Years > 10 AND 
+Profit growth 3Years > 12 AND 
+Price to Earning < (2 * EPS growth 3Years) AND 
+Return over 3years > 10 AND 
+Return over 1year > 0
+```
+
+---
+
+### **How the Query Maps to the Images**
+
+The query is structured to filter stocks only if they meet **all** the requirements from your provided steps:
+
+#### **Stage 1: Primary Screening (Step 1.jpeg)**
+* **ROE & ROCE:** `Average return on equity 3Years > 20` and `Average return on capital employed 3Years > 20`.
+* **Debt:** `Debt to equity < 1` (This targets the last financial year as requested).
+* **Promoter Pledge:** `Pledged percentage < 10` (Filters for low risk of promoter interference).
+* **Growth:** `Sales growth 3Years > 10` and `Profit growth 3Years > 12`.
+
+#### **Stage 2: Valuation (Step 2.jpeg)**
+* **P/E vs. Growth:** `Price to Earning < (2 * EPS growth 3Years)`. This ensures you aren't paying more than double the earnings growth rate.
+
+#### **Stage 3: Price Movement (Step 3.jpeg)**
+* **Momentum:** `Return over 3years > 10` and `Return over 1year > 0`. This filters out "Avoid" stocks that have negative returns or stagnating 3-year performance.
+
+### **Pro-Tips for Using This Query:**
+1.  **Strictness:** This is a very high-quality filter. Because it requires a stock to be both high-growth (12%+ profit) and high-efficiency (20%+ ROE), you may only find a handful of stocks in the entire market that qualify at any given time.
+2.  **Customization:** If you get zero results during a market downturn, you might slightly lower the `Pledged percentage` to `0` (which the author suggests is "better") or check if the `EPS growth` is being calculated over a specific period you prefer.
