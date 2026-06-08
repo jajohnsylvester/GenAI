@@ -15,6 +15,18 @@ Client :  https://github.com/jajohnsylvester/LocalLLMclient
 https://localllmclient.onrender.com  (Using : johnsylvester@zohomail.com )
 *********************************************************************************
 
+3. LLM + search tool ( duckduck go )
+
+Olama Platform : Llama3.2
+
+Olama : https://www.kaggle.com/code/johnsylvester/deepseekmodel-olama   ( Using : johnsylvester@gmail.com SSO )
+
+https://github.com/jajohnsylvester/searchag
+https://searchag.onrender.com
+*********************************************************************************
+
+
+
 
 
 
