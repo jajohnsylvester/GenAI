@@ -24,7 +24,17 @@ Olama : https://www.kaggle.com/code/johnsylvester/deepseekmodel-olama   ( Using 
 https://github.com/jajohnsylvester/searchag
 https://searchag.onrender.com
 *********************************************************************************
+4. RAG 
 
+ LLM , Embedding 
+
+Olama Platform : Llama3.2
+
+Olama : https://www.kaggle.com/code/johnsylvester/deepseekmodel-olama   ( Using : johnsylvester@gmail.com SSO )
+
+https://github.com/jajohnsylvester/rag
+https://rag-0wan.onrender.com
+*********************************************************************************
 
 
 
