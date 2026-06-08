@@ -1,3 +1,28 @@
+Agentic Examples :
+---------------------
+
+1.
+https://dev-utilities-hub--johnsylvester4.replit.app
+
+Using : johnsylvester@gmail.com SSO
+*********************************************************************************
+2. Olama Platform : Llama3.2
+
+Olama : https://www.kaggle.com/code/johnsylvester/deepseekmodel-olama   ( Using : johnsylvester@gmail.com SSO )
+
+
+Client :  https://github.com/jajohnsylvester/LocalLLMclient
+https://localllmclient.onrender.com  (Using : johnsylvester@zohomail.com )
+*********************************************************************************
+
+
+
+
+
+
+
+
+
 https://levelup.gitconnected.com/building-17-agentic-ai-patterns-and-their-role-in-large-scale-ai-systems-f4915b5615ce
 
 
