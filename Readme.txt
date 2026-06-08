@@ -26,7 +26,7 @@ https://searchag.onrender.com
 *********************************************************************************
 4. RAG 
 
- LLM , Embedding 
+ LLM , Embedding , ChromaDB (Vector DB using johnsylvester@gmail.com SSO )
 
 Olama Platform : Llama3.2
 
