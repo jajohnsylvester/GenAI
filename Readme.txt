@@ -48,15 +48,23 @@ https://rag-0wan.onrender.com
 Olama Platform : Llama3.2
 
 Olama : https://www.kaggle.com/code/johnsylvester/llamamodel5hour   ( Using : johnsylvester@gmail.com SSO )
+
 https://github.com/jajohnsylvester/tavilysearch
 https://tavilysearch.onrender.com/
 *********************************************************************************
 
+6. LLM + search (Tavily ) + Zoho tools 
+
+Olama Platform : Llama3.2
+
+Olama : https://www.kaggle.com/code/johnsylvester/llamamodel5hour   ( Using : johnsylvester@gmail.com SSO )
+
+https://github.com/jajohnsylvester/mcpag
+https://mcpag.onrender.com
 
 
 
-
-
+=============================================================================================================================
 
 
 https://levelup.gitconnected.com/building-17-agentic-ai-patterns-and-their-role-in-large-scale-ai-systems-f4915b5615ce
