@@ -1,25 +1,33 @@
-Agentic Examples :
----------------------
 
+
+                                    Replit App ( No Code )
+                                    ----------------------
 1.
 https://dev-utilities-hub--johnsylvester4.replit.app
 
 Using : johnsylvester@gmail.com SSO
 *********************************************************************************
+                                 LLM example 
+                                --------------   
+
 2. Olama Platform : Llama3.2
 
-Olama : https://www.kaggle.com/code/johnsylvester/deepseekmodel-olama   ( Using : johnsylvester@gmail.com SSO )
+Olama : https://www.kaggle.com/code/johnsylvester/llamamodel5hour  ( Using : johnsylvester@gmail.com SSO )
 
 
 Client :  https://github.com/jajohnsylvester/LocalLLMclient
 https://localllmclient.onrender.com  (Using : johnsylvester@zohomail.com )
 *********************************************************************************
 
+
+                                 Agentic AI 
+                                ------------
+
 3. LLM + search tool ( duckduck go )
 
 Olama Platform : Llama3.2
 
-Olama : https://www.kaggle.com/code/johnsylvester/deepseekmodel-olama   ( Using : johnsylvester@gmail.com SSO )
+Olama : https://www.kaggle.com/code/johnsylvester/llamamodel5hour   ( Using : johnsylvester@gmail.com SSO )
 
 https://github.com/jajohnsylvester/searchag
 https://searchag.onrender.com
@@ -30,13 +38,19 @@ https://searchag.onrender.com
 
 Olama Platform : Llama3.2
 
-Olama : https://www.kaggle.com/code/johnsylvester/deepseekmodel-olama   ( Using : johnsylvester@gmail.com SSO )
+Olama : https://www.kaggle.com/code/johnsylvester/llamamodel5hour   ( Using : johnsylvester@gmail.com SSO )
 
 https://github.com/jajohnsylvester/rag
 https://rag-0wan.onrender.com
 *********************************************************************************
+5.  LLM + search tool ( Tavily search )
 
+Olama Platform : Llama3.2
 
+Olama : https://www.kaggle.com/code/johnsylvester/llamamodel5hour   ( Using : johnsylvester@gmail.com SSO )
+https://github.com/jajohnsylvester/tavilysearch
+https://tavilysearch.onrender.com/
+*********************************************************************************
 
 
 
