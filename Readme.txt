@@ -53,7 +53,7 @@ https://github.com/jajohnsylvester/tavilysearch
 https://tavilysearch.onrender.com/
 *********************************************************************************
 
-6. LLM + search (Tavily ) + Zoho tools 
+6. LLM + search (Tavily ) + Zoho tools    --- WIP 
 
 Olama Platform : Llama3.2
 
