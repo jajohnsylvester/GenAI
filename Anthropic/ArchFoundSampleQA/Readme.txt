@@ -7,3 +7,5 @@ https://certificationpractice.com/practice-exams/anthropic-claude-certified-arch
 (60)
 
 https://aicertificationprep.com/exams
+
+https://github.com/avidevelops/claude-architect-exam-prep
