@@ -12,6 +12,8 @@ https://aicertificationprep.com/exams
 
 https://github.com/avidevelops/claude-architect-exam-prep
 
+https://practice.cyberskill.world/practice/ccaf/practice
+
 ---
 
 ## Exam Guide
