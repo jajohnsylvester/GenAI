@@ -1,0 +1,766 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Inside the Agent Loop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a "control room" — the live loop diagram and its transcript side by side, explainer sections below on a faint engineering grid */
+:root {
+  --paper: #EDF0F5;
+  --panel: #F8FAFD;
+  --ink: #141C33;
+  --muted: #59647E;
+  --line: #CAD2E0;
+  --grid: rgba(20, 28, 51, .05);
+  --accent: #2E47F0;
+  --c-perceive: #2E47F0;
+  --c-reason: #7A3BDB;
+  --c-act: #C96A06;
+  --c-observe: #0B8577;
+  --c-error: #D22B1F;
+  --on-color: #FFFFFF;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0D1220; --panel: #151C2E; --ink: #E5EAF5; --muted: #95A1BA; --line: #2A3450;
+    --grid: rgba(229, 234, 245, .04); --accent: #7088FF;
+    --c-perceive: #7088FF; --c-reason: #A982FF; --c-act: #F2A04A; --c-observe: #2CC2AE; --c-error: #FF6D60;
+    --on-color: #0D1220; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0D1220; --panel: #151C2E; --ink: #E5EAF5; --muted: #95A1BA; --line: #2A3450;
+  --grid: rgba(229, 234, 245, .04); --accent: #7088FF;
+  --c-perceive: #7088FF; --c-reason: #A982FF; --c-act: #F2A04A; --c-observe: #2CC2AE; --c-error: #FF6D60;
+  --on-color: #0D1220; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--ink);
+  font: 400 16px/1.6 var(--f-body);
+  padding-inline: 16px;
+  padding-block: 0 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.1; }
+p { margin: 0; }
+code, .mono { font-family: var(--f-mono); }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Hero */
+.hero { padding-block: 48px 28px; display: grid; gap: 16px; }
+.eyebrow { font: 500 12px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+.eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-act); animation: blink 1.6s ease-in-out infinite; }
+.hero h1 { font-size: clamp(40px, 7vw, 80px); font-weight: 800; letter-spacing: -.02em; }
+.hero h1 .loopword { display: inline-block; color: var(--accent); }
+.hero .lead { max-width: 64ch; font-size: 18px; color: var(--muted); }
+.hero .lead b { color: var(--ink); font-weight: 600; }
+.phaseword { font-weight: 600; }
+.pw-perceive { color: var(--c-perceive); } .pw-reason { color: var(--c-reason); }
+.pw-act { color: var(--c-act); } .pw-observe { color: var(--c-observe); }
+
+/* Controls */
+.theatre { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 16px; box-shadow: 0 12px 40px -24px rgba(20,28,51,.35); }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; }
+.group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.glabel { font: 500 11px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--muted); transition: background .2s, color .2s; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.seg button:hover:not([aria-pressed="true"]) { color: var(--ink); }
+.btn { border: 1px solid var(--line); background: var(--panel); padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; display: inline-flex; gap: 8px; align-items: center; transition: transform .15s, border-color .2s; }
+.btn:hover { border-color: var(--ink); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-color); min-width: 96px; justify-content: center; }
+.toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; user-select: none; }
+.toggle input { accent-color: var(--c-error); width: 16px; height: 16px; }
+.speed { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; }
+.speed input { width: 90px; accent-color: var(--accent); }
+.speed output { font-family: var(--f-mono); font-size: 13px; min-width: 3.2ch; font-variant-numeric: tabular-nums; }
+
+.goal { display: flex; gap: 12px; align-items: baseline; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 10px; }
+.goal .glabel { flex: none; }
+.goal p { font-weight: 500; min-width: 0; }
+
+/* Stage */
+.stage { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+.diagram { min-width: 0; }
+.diagram svg { width: 100%; height: auto; display: block; max-width: 560px; margin: 0 auto; overflow: visible; }
+
+/* SVG parts */
+.orbit { fill: none; stroke: var(--line); stroke-width: 2; }
+.orbit-flow { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 2 14; stroke-linecap: round; opacity: .55; animation: flow 1.4s linear infinite; }
+.chev { fill: var(--muted); opacity: .7; }
+.beam { stroke: var(--line); stroke-width: 2; stroke-dasharray: 4 6; transition: stroke .3s, opacity .3s; opacity: .7; }
+.beam.on { stroke: var(--c-act); opacity: 1; animation: flow .6s linear infinite; }
+.beam.back { stroke: var(--c-observe); animation-direction: reverse; }
+.beam.bad { stroke: var(--c-error); }
+.tool rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; transition: stroke .3s, fill .3s; }
+.tool .tname { fill: var(--ink); font: 600 15px var(--f-body); }
+.tool .tsig { fill: var(--muted); font: 400 12px var(--f-mono); }
+.tool.on rect { stroke: var(--c-act); stroke-width: 2.5; }
+.tool.back rect { stroke: var(--c-observe); stroke-width: 2.5; }
+.tool.bad rect { stroke: var(--c-error); stroke-width: 2.5; }
+.tool.bad { animation: shake .4s; }
+.tool.used .tsig { fill: var(--ink); }
+
+.core-body { fill: var(--ink); transition: fill .3s; }
+.core-ring { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 7; transform-box: fill-box; transform-origin: center; animation: spin 18s linear infinite; }
+.core-halo { fill: var(--accent); opacity: .08; transform-box: fill-box; transform-origin: center; animation: breathe 3.2s ease-in-out infinite; }
+.core-t1 { fill: var(--paper); font: 800 26px var(--f-display); }
+.core-t2 { fill: var(--paper); font: 400 11px var(--f-mono); letter-spacing: .12em; opacity: .75; }
+.core.thinking .core-ring { stroke: var(--c-reason); stroke-width: 3; animation-duration: 2.2s; }
+.core.thinking .core-halo { fill: var(--c-reason); opacity: .2; animation-duration: 1s; }
+.core.flash .core-halo { fill: var(--c-observe); animation: flash 1.2s ease-out; }
+
+.node circle.nbg { fill: var(--panel); stroke-width: 3; transition: fill .3s; }
+.node .nlabel { font: 700 15px var(--f-display); transition: fill .3s; }
+.node .nnum { font: 500 10px var(--f-mono); fill: var(--muted); letter-spacing: .1em; transition: fill .3s; }
+.node .nring { fill: none; stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.node.active .nring { animation: ripple 1.2s ease-out infinite; }
+.node.ping .nring { animation: ripple .7s ease-out 1; }
+.node.active .nlabel, .node.active .nnum { fill: var(--on-color); }
+.node-perceive circle.nbg, .node-perceive .nring { stroke: var(--c-perceive); } .node-perceive .nlabel { fill: var(--c-perceive); } .node-perceive.active circle.nbg { fill: var(--c-perceive); }
+.node-reason circle.nbg, .node-reason .nring { stroke: var(--c-reason); } .node-reason .nlabel { fill: var(--c-reason); } .node-reason.active circle.nbg { fill: var(--c-reason); }
+.node-act circle.nbg, .node-act .nring { stroke: var(--c-act); } .node-act .nlabel { fill: var(--c-act); } .node-act.active circle.nbg { fill: var(--c-act); }
+.node-observe circle.nbg, .node-observe .nring { stroke: var(--c-observe); } .node-observe .nlabel { fill: var(--c-observe); } .node-observe.active circle.nbg { fill: var(--c-observe); }
+
+.pulse { transition: fill .3s; }
+.pulse-halo { opacity: .25; transition: fill .3s; }
+.trail { opacity: 0; }
+.packet { opacity: 0; }
+
+/* Side panel */
+.side { display: grid; gap: 14px; min-width: 0; }
+.now { border-radius: 10px; padding: 14px 16px; background: var(--paper); border: 1px solid var(--line); display: grid; gap: 6px; position: relative; overflow: hidden; }
+.now::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--now-color, var(--muted)); transition: background .3s; }
+.now .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.now h3 { font-size: 24px; color: var(--now-color, var(--ink)); transition: color .3s; }
+.now p { color: var(--muted); font-size: 15px; min-height: 3.2em; }
+.stats { display: flex; gap: 14px; font: 500 12px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.stats b { color: var(--ink); font-weight: 500; }
+
+.meter { display: grid; gap: 6px; }
+.meter .row { display: flex; justify-content: space-between; font: 500 12px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.meter .row b { color: var(--ink); font-weight: 500; }
+.bar { height: 14px; border-radius: 4px; background: var(--paper); border: 1px solid var(--line); display: flex; overflow: hidden; }
+.bar span { height: 100%; width: 0; transition: width .5s cubic-bezier(.2,.8,.2,1); border-right: 1px solid var(--panel); }
+.seg-perceive { background: var(--c-perceive); } .seg-reason { background: var(--c-reason); }
+.seg-act { background: var(--c-act); } .seg-observe { background: var(--c-observe); }
+.seg-error { background: var(--c-error); } .seg-done { background: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+
+.log { list-style: none; margin: 0; padding: 4px 6px 4px 0; display: grid; gap: 8px; height: 330px; overflow-y: auto; align-content: start; scroll-behavior: smooth; }
+.entry { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14px; animation: slidein .35s ease-out; }
+.entry .tag { font: 500 10.5px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; padding: 5px 0; text-align: center; border-radius: 4px; color: var(--on-color); margin-top: 1px; }
+.entry .txt { min-width: 0; overflow-wrap: anywhere; }
+.entry.e-act .txt { font-family: var(--f-mono); font-size: 13px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+.entry.e-act .tool-name { color: var(--c-act); font-weight: 500; }
+.entry.e-reason .txt { color: var(--muted); font-style: italic; }
+.entry.e-error .txt { color: var(--c-error); font-family: var(--f-mono); font-size: 13px; }
+.entry.e-user .tag { background: var(--muted); }
+.entry.e-done .txt { border: 2px solid var(--c-observe); border-radius: 8px; padding: 10px 12px; font-weight: 500; }
+.tag-perceive { background: var(--c-perceive); } .tag-reason { background: var(--c-reason); }
+.tag-act { background: var(--c-act); } .tag-observe { background: var(--c-observe); }
+.tag-error { background: var(--c-error); } .tag-done { background: var(--ink); }
+.caret { display: inline-block; width: .55em; height: 1em; background: currentColor; vertical-align: -2px; margin-left: 1px; animation: blink .8s steps(1) infinite; }
+
+/* Sections */
+section.block { padding-block: 64px 0; display: grid; gap: 24px; }
+section.block > header { display: grid; gap: 10px; max-width: 70ch; }
+section.block h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; letter-spacing: -.01em; }
+section.block > header p { color: var(--muted); font-size: 17px; }
+
+.moves { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; counter-reset: mv; }
+@media (max-width: 900px) { .moves { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .moves { grid-template-columns: minmax(0, 1fr); } }
+.move { padding: 18px; border-top: 4px solid var(--mc); background: var(--panel); border-radius: 0 0 10px 10px; display: grid; gap: 8px; align-content: start; transition: transform .25s; }
+.move:hover { transform: translateY(-4px); }
+.move .num { font: 500 12px var(--f-mono); color: var(--mc); letter-spacing: .1em; }
+.move h3 { font-size: 22px; color: var(--mc); }
+.move p { font-size: 15px; color: var(--muted); }
+.move .ex { font: 400 12.5px/1.5 var(--f-mono); color: var(--ink); background: var(--paper); border-radius: 6px; padding: 8px 10px; overflow-wrap: anywhere; }
+
+.anatomy { display: grid; border-top: 1px solid var(--line); }
+.part { display: grid; grid-template-columns: 220px minmax(0, 1fr) 120px; gap: 20px; padding-block: 18px; border-bottom: 1px solid var(--line); align-items: center; }
+@media (max-width: 720px) { .part { grid-template-columns: minmax(0, 1fr); gap: 6px; } .part .viz { display: none; } }
+.part h3 { font-size: 20px; }
+.part p { color: var(--muted); min-width: 0; }
+.part .viz svg { width: 120px; height: 44px; display: block; }
+.viz .s { fill: none; stroke: var(--muted); stroke-width: 2; }
+.viz .f { fill: var(--accent); }
+.viz .f2 { fill: var(--c-act); }
+.viz .f3 { fill: var(--c-observe); }
+.viz .f4 { fill: var(--c-reason); }
+.viz .stroke-a { fill: none; stroke: var(--accent); stroke-width: 2; }
+
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .compare { grid-template-columns: minmax(0, 1fr); } }
+.lane { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 12px; align-content: start; }
+.lane h3 { font-size: 22px; }
+.lane p { color: var(--muted); font-size: 15px; }
+.lane svg { width: 100%; height: auto; display: block; max-width: 100%; }
+.lane .box { fill: var(--paper); stroke: var(--line); stroke-width: 1.5; }
+.lane .lbl { fill: var(--ink); font: 600 13px var(--f-body); }
+.lane .sub { fill: var(--muted); font: 400 11px var(--f-mono); }
+.lane .path { fill: none; stroke: var(--line); stroke-width: 2; stroke-dasharray: 4 5; }
+.lane .dot1 { fill: var(--accent); }
+.lane .dot2 { fill: var(--c-act); }
+
+.stops { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { .stops { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .stops { grid-template-columns: minmax(0, 1fr); } }
+.stop { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); display: grid; gap: 6px; align-content: start; }
+.stop .k { font: 500 11px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--sc); display: flex; align-items: center; gap: 8px; }
+.stop .k::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--sc); box-shadow: 0 0 0 0 var(--sc); animation: beacon 2.4s ease-out infinite; }
+.stop h3 { font-size: 18px; }
+.stop p { color: var(--muted); font-size: 14.5px; }
+
+footer { padding-block: 56px 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+
+@keyframes flow { to { stroke-dashoffset: -16; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes flash { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(1.8); opacity: .08; } }
+@keyframes ripple { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(1.55); opacity: 0; } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes slidein { from { opacity: 0; transform: translateY(8px); } }
+@keyframes beacon { 0% { box-shadow: 0 0 0 0 var(--sc); } 70%, 100% { box-shadow: 0 0 0 8px transparent; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
+}
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow"><span class="dot"></span>Interactive explainer</div>
+    <h1>Inside the agent <span class="loopword">loop</span></h1>
+    <p class="lead">An AI agent is a <b>language model running in a loop</b>. It reads the situation (<span class="phaseword pw-perceive">perceive</span>), decides on one next step (<span class="phaseword pw-reason">reason</span>), uses a tool (<span class="phaseword pw-act">act</span>), and reads the result (<span class="phaseword pw-observe">observe</span>). Then it goes around again until the job is done. Pick a task and watch one work.</p>
+  </header>
+
+  <section class="theatre" aria-label="Agent loop simulator">
+    <div class="controls">
+      <div class="group">
+        <span class="glabel">Task</span>
+        <div class="seg" role="group" aria-label="Choose a task">
+          <button type="button" id="sc-trip" data-sc="trip" aria-pressed="true">Plan a trip</button>
+          <button type="button" id="sc-bug" data-sc="bug" aria-pressed="false">Fix a bug</button>
+          <button type="button" id="sc-research" data-sc="research" aria-pressed="false">Research</button>
+        </div>
+      </div>
+      <div class="group">
+        <button type="button" class="btn primary" id="play">Run</button>
+        <button type="button" class="btn" id="step" title="Run one step">Step</button>
+        <button type="button" class="btn" id="reset">Reset</button>
+        <label class="speed" for="speed">Speed <input type="range" id="speed" min="0.5" max="3" step="0.25" value="1"><output id="speedOut">1×</output></label>
+        <label class="toggle" for="fail"><input type="checkbox" id="fail"> Make a tool fail</label>
+      </div>
+    </div>
+
+    <div class="goal"><span class="glabel">Goal</span><p id="goalText"></p></div>
+
+    <div class="stage">
+      <div class="diagram"><svg id="loop" viewBox="0 0 600 600" role="img" aria-label="Diagram: the model at the centre, four phases on a loop around it, and four tools in the corners"></svg></div>
+      <aside class="side">
+        <div class="now" id="now">
+          <div class="row">
+            <h3 id="nowTitle">Ready</h3>
+            <div class="stats"><span>Turn <b id="stTurn">0</b></span><span>Tool calls <b id="stCalls">0</b></span><span>Step <b id="stStep">0</b>/20</span></div>
+          </div>
+          <p id="nowText">Press Run to start. The agent will loop through the four phases until it reaches the goal.</p>
+        </div>
+        <div class="meter">
+          <div class="row"><span>Context window</span><span><b id="tokNow">0</b> / 8,000 tokens</span></div>
+          <div class="bar" id="bar"></div>
+          <div class="legend"><span><i class="seg-perceive"></i>Goal &amp; instructions</span><span><i class="seg-reason"></i>Thinking</span><span><i class="seg-act"></i>Tool calls</span><span><i class="seg-observe"></i>Results</span><span><i class="seg-error"></i>Errors</span></div>
+        </div>
+        <ol class="log" id="log" aria-live="polite"></ol>
+      </aside>
+    </div>
+  </section>
+
+  <section class="block">
+    <header>
+      <h2>The four moves, in order</h2>
+      <p>Every agent, from a coding assistant to a travel planner, repeats the same cycle. The only thing that changes is which tools it has and what's in its context.</p>
+    </header>
+    <div class="moves">
+      <article class="move" style="--mc: var(--c-perceive)"><span class="num">STEP 1</span><h3>Perceive</h3><p>Gather the goal, the instructions, and every earlier result into the context window. This is all the model can see.</p><div class="ex">system + goal + history</div></article>
+      <article class="move" style="--mc: var(--c-reason)"><span class="num">STEP 2</span><h3>Reason</h3><p>The model reads the context and picks exactly one next action. Or it decides it has enough to answer.</p><div class="ex">"Check the calendar before booking."</div></article>
+      <article class="move" style="--mc: var(--c-act)"><span class="num">STEP 3</span><h3>Act</h3><p>The model writes a tool call. The program around it runs the tool. The model never touches the outside world directly.</p><div class="ex">calendar.check("2026-11-14")</div></article>
+      <article class="move" style="--mc: var(--c-observe)"><span class="num">STEP 4</span><h3>Observe</h3><p>The tool's output, including any error, is appended to the context. Then the loop goes back to step 1 knowing more.</p><div class="ex">→ "Both days free."</div></article>
+    </div>
+  </section>
+
+  <section class="block">
+    <header>
+      <h2>What an agent is made of</h2>
+      <p>Five parts. The model is only one of them.</p>
+    </header>
+    <div class="anatomy">
+      <div class="part"><h3>Model</h3><p>The language model. It reads text and writes text, including tool requests. On its own it can't browse, run code, or remember past sessions.</p>
+        <div class="viz"><svg viewBox="0 0 120 44"><circle class="f" cx="60" cy="22" r="12"><animate attributeName="r" values="11;14;11" dur="2.4s" repeatCount="indefinite"/></circle><circle class="s" cx="60" cy="22" r="19" stroke-dasharray="3 5"><animateTransform attributeName="transform" type="rotate" from="0 60 22" to="360 60 22" dur="8s" repeatCount="indefinite"/></circle></svg></div></div>
+      <div class="part"><h3>Instructions</h3><p>The system prompt: the agent's role, its rules, and a description of each tool and when to use it.</p>
+        <div class="viz"><svg viewBox="0 0 120 44"><rect class="s" x="30" y="4" width="60" height="36" rx="4"/><rect class="f4" x="38" y="12" width="0" height="3"><animate attributeName="width" values="0;44;44" dur="3s" repeatCount="indefinite"/></rect><rect class="f4" x="38" y="20" width="0" height="3"><animate attributeName="width" values="0;0;36;36" dur="3s" repeatCount="indefinite"/></rect><rect class="f4" x="38" y="28" width="0" height="3"><animate attributeName="width" values="0;0;0;28" dur="3s" repeatCount="indefinite"/></rect></svg></div></div>
+      <div class="part"><h3>Tools</h3><p>Functions the agent may call, such as search, run code, read files, or send email. Each has a name, a description, and typed inputs.</p>
+        <div class="viz"><svg viewBox="0 0 120 44"><rect class="s" x="6" y="12" width="20" height="20" rx="3"/><rect class="s" x="94" y="12" width="20" height="20" rx="3"/><line class="s" x1="26" y1="22" x2="94" y2="22" stroke-dasharray="3 4"/><circle class="f2" r="4" cy="22"><animate attributeName="cx" values="28;92;28" dur="2s" repeatCount="indefinite"/></circle></svg></div></div>
+      <div class="part"><h3>Context window</h3><p>The model's working memory for this task. Every step adds to it, and it has a size limit, so long tasks need summarizing or saved notes.</p>
+        <div class="viz"><svg viewBox="0 0 120 44"><rect class="s" x="6" y="14" width="108" height="16" rx="3"/><rect class="f3" x="8" y="16" height="12" rx="2" width="10"><animate attributeName="width" values="10;104;104;10" dur="4s" repeatCount="indefinite"/></rect></svg></div></div>
+      <div class="part"><h3>Loop &amp; stop rules</h3><p>Plain code that keeps the cycle going and decides when to stop: goal met, step limit reached, or a person needs to approve something.</p>
+        <div class="viz"><svg viewBox="0 0 120 44"><circle class="s" cx="60" cy="22" r="16"/><circle class="f" r="4"><animateMotion dur="2.4s" repeatCount="indefinite" path="M60,6 a16,16 0 1,1 -0.1,0"/></circle></svg></div></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <header>
+      <h2>Chatbot versus agent</h2>
+      <p>A chatbot answers in one pass from what it already knows. An agent can go and find out, try things, check its work, and try again.</p>
+    </header>
+    <div class="compare">
+      <div class="lane">
+        <h3>Chatbot</h3>
+        <svg class="anim" viewBox="0 0 400 140" aria-label="A question goes into the model and a single answer comes out">
+          <path id="cbPath" class="path" d="M60,70 L340,70"/>
+          <rect class="box" x="10" y="48" width="90" height="44" rx="8"/><text class="lbl" x="55" y="75" text-anchor="middle">Question</text>
+          <rect class="box" x="155" y="40" width="90" height="60" rx="30"/><text class="lbl" x="200" y="75" text-anchor="middle">Model</text>
+          <rect class="box" x="300" y="48" width="90" height="44" rx="8"/><text class="lbl" x="345" y="75" text-anchor="middle">Answer</text>
+          <circle class="dot1" r="6"><animateMotion dur="2.6s" repeatCount="indefinite"><mpath href="#cbPath"/></animateMotion></circle>
+          <text class="sub" x="200" y="128" text-anchor="middle">one pass · no tools · no checking</text>
+        </svg>
+      </div>
+      <div class="lane">
+        <h3>Agent</h3>
+        <svg class="anim" viewBox="0 0 400 140" aria-label="The goal goes into a loop with the model and tools that repeats several times before the answer comes out">
+          <path id="agPath" class="path" d="M200,30 C260,30 280,70 280,70 C280,70 260,110 200,110 C140,110 120,70 120,70 C120,70 140,30 200,30 Z"/>
+          <rect class="box" x="4" y="50" width="70" height="40" rx="8"/><text class="lbl" x="39" y="75" text-anchor="middle">Goal</text>
+          <rect class="box" x="165" y="50" width="70" height="40" rx="20"/><text class="lbl" x="200" y="75" text-anchor="middle">Model</text>
+          <rect class="box" x="326" y="50" width="70" height="40" rx="8"/><text class="lbl" x="361" y="75" text-anchor="middle">Answer</text>
+          <text class="sub" x="200" y="20" text-anchor="middle">tools</text>
+          <circle class="dot2" r="6"><animateMotion dur="2.2s" repeatCount="indefinite"><mpath href="#agPath"/></animateMotion></circle>
+          <circle class="dot1" r="5"><animateMotion dur="2.2s" begin="1.1s" repeatCount="indefinite"><mpath href="#agPath"/></animateMotion></circle>
+          <text class="sub" x="200" y="134" text-anchor="middle">loops · uses tools · checks results</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <header>
+      <h2>When does it stop?</h2>
+      <p>A well-built agent always has a way out of the loop. These are the usual exits.</p>
+    </header>
+    <div class="stops">
+      <div class="stop" style="--sc: var(--c-observe)"><span class="k">Success</span><h3>The goal is met</h3><p>The model decides it has what it needs and writes a final answer instead of another tool call.</p></div>
+      <div class="stop" style="--sc: var(--c-act)"><span class="k">Limit</span><h3>Step limit reached</h3><p>A hard cap, such as 20 steps, keeps a confused agent from looping forever.</p></div>
+      <div class="stop" style="--sc: var(--c-reason)"><span class="k">Hand-off</span><h3>A person must approve</h3><p>Risky actions like paying, deleting, or sending a message pause for a human yes.</p></div>
+      <div class="stop" style="--sc: var(--c-error)"><span class="k">Budget</span><h3>Out of time or tokens</h3><p>The context window fills up or the cost budget runs out, so the agent reports what it has so far.</p></div>
+    </div>
+  </section>
+
+  <footer>The tasks above are scripted examples to show the mechanics. A real agent writes its own thinking and tool calls at each step, but the loop around it works exactly like this.</footer>
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const C = 300, R = 170;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const PHASES = {
+    perceive: { a: -90, label: "Perceive", n: "01", text: "The agent gathers the goal, its instructions, and everything learned so far into its context window." },
+    reason:   { a: 0,   label: "Reason",   n: "02", text: "The model reads the whole context and decides on exactly one next action." },
+    act:      { a: 90,  label: "Act",      n: "03", text: "The model writes a tool call. The program around it runs the tool and waits for the result." },
+    observe:  { a: 180, label: "Observe",  n: "04", text: "The tool's result is added to the context, so the model can see what happened on the next turn." }
+  };
+  const DONE_TEXT = "The model decided the goal is met, so it writes a final answer instead of another tool call. The loop stops.";
+  const ERROR_TEXT = "Something went wrong. The problem goes into the context like any other result, and the model adjusts its plan.";
+
+  const TOOLS = {
+    search:   { x: 78,  y: 78,  name: "Web search", sig: "search()" },
+    calendar: { x: 522, y: 78,  name: "Calendar",   sig: "calendar()" },
+    files:    { x: 78,  y: 522, name: "Files",      sig: "files()" },
+    code:     { x: 522, y: 522, name: "Code runner", sig: "run()" }
+  };
+
+  const SCENARIOS = {
+    trip: {
+      goal: "Plan a 2-day Kyoto trip for under $800 on the weekend of Nov 14.",
+      steps: [
+        { p: "perceive", t: "Goal: Kyoto, 2 days, under $800, Nov 14–15. Tools available: search, calendar, code runner.", tok: 900 },
+        { p: "reason", t: "Before booking anything, check that the user is free that weekend." },
+        { p: "act", tool: "calendar", t: 'check("2026-11-14", "2026-11-15")' },
+        { p: "observe", t: "Both days free. One event: dinner Nov 15 at 19:00, so the train home must arrive by 18:00.", tok: 420 },
+        { p: "reason", t: "Find somewhere to stay for one night. Ask for prices, not only names." },
+        { p: "act", tool: "search", t: 'search("Kyoto ryokan Nov 14 under $200 a night")' },
+        { p: "observe", t: "3 results. Best rated within budget: $165 a night near Gion.", tok: 880 },
+        { p: "reason", t: "Now the train. A round trip from Tokyo is the biggest cost." },
+        { p: "act", tool: "search", t: 'search("Tokyo to Kyoto shinkansen round-trip fare")', fail: true },
+        { p: "observe", err: true, t: "Error: search timed out after 10 s.", tok: 60, fail: true },
+        { p: "reason", t: "The tool failed. Retry once with a shorter, more specific query.", fail: true },
+        { p: "act", tool: "search", t: 'search("Nozomi Tokyo Kyoto fare")' },
+        { p: "observe", t: "Round trip ¥28,340, about $188. The last train arriving by 18:00 leaves Kyoto at 15:33.", tok: 760 },
+        { p: "reason", t: "Add up the costs with code instead of doing the math in my head." },
+        { p: "act", tool: "code", t: "165 + 188 + 2 * 95   # room + train + food" },
+        { p: "observe", t: "543. That leaves $257 of the budget.", tok: 90 },
+        { p: "reason", t: "Every constraint is met. Write the plan." },
+        { p: "done", t: "Kyoto, Nov 14–15: stay near Gion ($165), take the Nozomi ($188 round trip), and catch the 15:33 home in time for your 19:00 dinner. Total about $543, which is $257 under budget." }
+      ]
+    },
+    bug: {
+      goal: "Make the failing test test_login_rejects_expired_token pass.",
+      steps: [
+        { p: "perceive", t: "Goal: one failing login test. Tools available: files, code runner.", tok: 1100 },
+        { p: "reason", t: "Reproduce the failure first, so I fix the real error and not a guess." },
+        { p: "act", tool: "code", t: "pytest tests/test_auth.py -k expired" },
+        { p: "observe", t: "FAILED: expected status 401, got 200.", tok: 640 },
+        { p: "reason", t: "An expired token is being accepted. Find where tokens are validated." },
+        { p: "act", tool: "files", t: 'grep -n "def validate_token" src/' },
+        { p: "observe", t: 'src/auth.py:42 — validate_token() decodes the token but never checks "exp".', tok: 520 },
+        { p: "reason", t: "Add an expiry check right there. Keep the change small." },
+        { p: "act", tool: "files", t: 'edit src/auth.py  + if payload["exp"] < now(): raise TokenExpired' },
+        { p: "observe", t: "Saved. 2 lines added.", tok: 120 },
+        { p: "reason", t: "Run the whole suite, to confirm the fix and catch side effects." },
+        { p: "act", tool: "code", t: "pytest tests/" },
+        { p: "observe", err: true, t: 'NameError: name "now" is not defined (src/auth.py:44)', tok: 380, fail: true },
+        { p: "reason", t: "My edit used a function that isn't imported. Use time.time() instead.", fail: true },
+        { p: "act", tool: "files", t: "edit src/auth.py  now() → time.time(), add import time", fail: true },
+        { p: "observe", t: "Saved. 2 lines changed.", tok: 110, fail: true },
+        { p: "reason", t: "Run the suite again.", fail: true },
+        { p: "act", tool: "code", t: "pytest tests/", fail: true },
+        { p: "observe", t: "48 passed in 2.1 s.", tok: 300 },
+        { p: "reason", t: "The bug is fixed and nothing else broke. Report the change." },
+        { p: "done", t: 'Fixed. validate_token() in src/auth.py now rejects tokens past their "exp" time. The failing test passes, along with all 48 tests in the suite.' }
+      ]
+    },
+    research: {
+      goal: "How much longer does one laptop on my shortlist last on battery than the other?",
+      steps: [
+        { p: "perceive", t: "Goal: compare battery life of the two shortlisted laptops. Tools available: files, search, code runner.", tok: 850 },
+        { p: "reason", t: "I don't know which laptops are on the shortlist. It should be in the user's notes." },
+        { p: "act", tool: "files", t: 'read("notes/laptops.md")' },
+        { p: "observe", t: "Shortlist: Aero 14 and Nimbus 13.", tok: 180 },
+        { p: "reason", t: "Look for independent battery tests, not the makers' claims." },
+        { p: "act", tool: "search", t: 'search("Aero 14 battery rundown test hours")' },
+        { p: "observe", t: "Two reviews measured about 11.5 h of web browsing.", tok: 940 },
+        { p: "reason", t: "Same search for the second laptop." },
+        { p: "act", tool: "search", t: 'search("Nimbus 13 battery hours")' },
+        { p: "observe", err: true, t: "Conflict: one page says 13 h, another says 9 h.", tok: 820, fail: true },
+        { p: "reason", t: "Sources disagree. The 13 h figure is the maker's claim. Look for a measured test.", fail: true },
+        { p: "act", tool: "search", t: 'search("Nimbus 13 measured battery rundown test")', fail: true },
+        { p: "observe", t: "Measured: about 9 h of web browsing.", tok: 870 },
+        { p: "reason", t: "Work out the gap exactly." },
+        { p: "act", tool: "code", t: "11.5 - 9.0" },
+        { p: "observe", t: "2.5", tok: 40 },
+        { p: "reason", t: "I have both numbers from comparable tests. Answer." },
+        { p: "done", t: "The Aero 14 lasts about 11.5 h of web browsing and the Nimbus 13 about 9 h, so the Aero 14 runs roughly 2.5 hours longer. Both figures come from independent tests." }
+      ]
+    }
+  };
+
+  /* ---------- build the SVG ---------- */
+  const svg = document.getElementById("loop");
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(e);
+    return e;
+  }
+  function txt(parent, x, y, cls, s) { const t = el("text", { x, y, class: cls, "text-anchor": "middle" }, parent); t.textContent = s; return t; }
+  const pos = (deg, r = R) => ({ x: C + r * Math.cos(deg * Math.PI / 180), y: C + r * Math.sin(deg * Math.PI / 180) });
+
+  const beams = {}, toolEls = {}, nodeEls = {};
+  for (const k in TOOLS) {
+    const T = TOOLS[k];
+    beams[k] = el("line", { x1: C, y1: C, x2: T.x, y2: T.y, class: "beam" });
+  }
+  el("circle", { cx: C, cy: C, r: R, class: "orbit" });
+  el("circle", { cx: C, cy: C, r: R, class: "orbit-flow" });
+  [-45, 45, 135, 225].forEach(a => {
+    const p = pos(a);
+    el("path", { d: "M-6,-7 L6,0 L-6,7 Z", class: "chev", transform: `translate(${p.x},${p.y}) rotate(${a + 90})` });
+  });
+  for (const k in TOOLS) {
+    const T = TOOLS[k];
+    const g = el("g", { class: "tool" });
+    el("rect", { x: T.x - 62, y: T.y - 30, width: 124, height: 60, rx: 10 }, g);
+    txt(g, T.x, T.y - 4, "tname", T.name);
+    txt(g, T.x, T.y + 15, "tsig", T.sig);
+    toolEls[k] = g;
+  }
+  const core = el("g", { class: "core" });
+  el("circle", { cx: C, cy: C, r: 82, class: "core-halo" }, core);
+  el("circle", { cx: C, cy: C, r: 74, class: "core-ring" }, core);
+  el("circle", { cx: C, cy: C, r: 60, class: "core-body" }, core);
+  txt(core, C, C + 4, "core-t1", "LLM");
+  txt(core, C, C + 24, "core-t2", "MODEL");
+
+  for (const k in PHASES) {
+    const P = PHASES[k], p = pos(P.a);
+    const g = el("g", { class: "node node-" + k });
+    el("circle", { cx: p.x, cy: p.y, r: 44, class: "nring" }, g);
+    el("circle", { cx: p.x, cy: p.y, r: 44, class: "nbg" }, g);
+    txt(g, p.x, p.y - 4, "nnum", P.n);
+    txt(g, p.x, p.y + 14, "nlabel", P.label);
+    nodeEls[k] = g;
+  }
+  const trail = [];
+  for (let i = 0; i < 7; i++) trail.push(el("circle", { r: 7 - i * 0.7, class: "trail" }));
+  const packet = el("circle", { r: 8, class: "packet", cx: C, cy: C });
+  const halo = el("circle", { r: 18, class: "pulse-halo" });
+  const pulse = el("circle", { r: 9, class: "pulse" });
+
+  /* ---------- state ---------- */
+  const $ = id => document.getElementById(id);
+  const log = $("log"), bar = $("bar");
+  let scKey = "trip", steps = [], idx = 0, token = 0, playing = false, gate = null, ended = false;
+  let angle = -90, radius = R, curPhase = null, lastTool = null, tokens = 0, speed = 1;
+  let turns = 0, calls = 0, stepNo = 0;
+  const MAX_TOK = 8000;
+
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function colorFor(phase) { return `var(--c-${phase})`; }
+  function setPulseColor(c) { pulse.style.fill = c; halo.style.fill = c; trail.forEach(t => t.style.fill = c); packet.style.fill = c; }
+
+  function placePulse() {
+    const p = pos(angle, radius);
+    pulse.setAttribute("cx", p.x); pulse.setAttribute("cy", p.y);
+    halo.setAttribute("cx", p.x); halo.setAttribute("cy", p.y);
+  }
+  const history = [];
+  function pushTrail() {
+    history.unshift({ a: angle, r: radius });
+    if (history.length > 40) history.pop();
+    trail.forEach((t, i) => {
+      const h = history[(i + 1) * 4];
+      if (!h) { t.style.opacity = 0; return; }
+      const p = pos(h.a, h.r);
+      t.setAttribute("cx", p.x); t.setAttribute("cy", p.y);
+      t.style.opacity = (0.45 - i * 0.06).toFixed(2);
+    });
+  }
+  function clearTrail() { history.length = 0; trail.forEach(t => t.style.opacity = 0); }
+
+  const dur = ms => reduce ? 0 : ms / speed;
+  function sleep(ms) { return new Promise(r => setTimeout(r, reduce ? Math.min(ms, 250) / speed : ms / speed)); }
+  function tween(ms, fn, my) {
+    return new Promise(res => {
+      if (ms <= 0) { fn(1); return res(); }
+      const t0 = performance.now();
+      (function frame(now) {
+        if (my !== token) return res();
+        const k = Math.min(1, (now - t0) / ms);
+        fn(k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+        if (k < 1) requestAnimationFrame(frame); else res();
+      })(t0);
+    });
+  }
+
+  function setActive(phase) {
+    for (const k in nodeEls) nodeEls[k].classList.toggle("active", k === phase);
+    core.classList.toggle("thinking", phase === "reason");
+  }
+  function ping(k) {
+    const n = nodeEls[k]; n.classList.remove("ping"); void n.getBBox(); n.classList.add("ping");
+    setTimeout(() => n.classList.remove("ping"), 800);
+  }
+
+  async function moveTo(phase, my) {
+    const target = PHASES[phase].a;
+    if (radius < R) { // coming back out from the centre
+      const r0 = radius; angle = target;
+      await tween(dur(400), k => { radius = r0 + (R - r0) * k; placePulse(); pushTrail(); }, my);
+      return;
+    }
+    if (curPhase === phase) return;
+    const from = angle; let to = target;
+    while (to <= from) to += 360;
+    const span = to - from;
+    let prev = from;
+    await tween(dur(span / 90 * 520), k => {
+      angle = from + span * k;
+      for (const n in PHASES) {
+        let na = PHASES[n].a; while (na <= prev) na += 360;
+        if (na < angle && n !== phase) ping(n);
+      }
+      prev = angle; placePulse(); pushTrail();
+    }, my);
+    angle = ((target % 360) + 360) % 360; if (angle > 180) angle -= 360;
+  }
+
+  async function shoot(tool, back, bad, my) {
+    const T = TOOLS[tool], b = beams[tool], g = toolEls[tool];
+    b.classList.add("on"); b.classList.toggle("back", back); b.classList.toggle("bad", !!bad);
+    g.classList.remove("on", "back", "bad"); g.classList.add(back ? (bad ? "bad" : "back") : "on", "used");
+    packet.style.fill = bad ? "var(--c-error)" : colorFor(back ? "observe" : "act");
+    packet.style.opacity = 1;
+    const [x0, y0, x1, y1] = back ? [T.x, T.y, C, C] : [C, C, T.x, T.y];
+    await tween(dur(650), k => { packet.setAttribute("cx", x0 + (x1 - x0) * k); packet.setAttribute("cy", y0 + (y1 - y0) * k); }, my);
+    packet.style.opacity = 0;
+    if (back) { await sleep(250); b.classList.remove("on", "back", "bad"); g.classList.remove("on", "back", "bad"); }
+  }
+
+  function addTokens(n, cls) {
+    const room = Math.max(0, MAX_TOK - tokens); n = Math.min(n, room);
+    if (!n) return;
+    tokens += n;
+    const s = document.createElement("span"); s.className = "seg-" + cls;
+    bar.appendChild(s);
+    requestAnimationFrame(() => requestAnimationFrame(() => { s.style.width = (n / MAX_TOK * 100) + "%"; }));
+    $("tokNow").textContent = tokens.toLocaleString("en-US");
+  }
+
+  function setNow(title, text, color) {
+    $("nowTitle").textContent = title; $("nowText").textContent = text;
+    $("now").style.setProperty("--now-color", color || "var(--muted)");
+  }
+  function stats() { $("stTurn").textContent = turns; $("stCalls").textContent = calls; $("stStep").textContent = stepNo; }
+
+  function entry(kind, tagText, tagCls) {
+    const li = document.createElement("li"); li.className = "entry e-" + kind;
+    const tag = document.createElement("span"); tag.className = "tag tag-" + tagCls; tag.textContent = tagText;
+    const body = document.createElement("div"); body.className = "txt";
+    li.append(tag, body); log.appendChild(li);
+    log.scrollTop = log.scrollHeight;
+    return body;
+  }
+  async function typeInto(node, text, my, cps) {
+    if (reduce) { node.textContent = text; return; }
+    const caret = document.createElement("span"); caret.className = "caret";
+    const tn = document.createTextNode(""); node.append(tn, caret);
+    const per = 1000 / (cps * speed);
+    for (let i = 1; i <= text.length; i += 2) {
+      if (my !== token) break;
+      tn.data = text.slice(0, i);
+      if (i % 20 < 2) log.scrollTop = log.scrollHeight;
+      await new Promise(r => setTimeout(r, per * 2));
+    }
+    tn.data = text; caret.remove(); log.scrollTop = log.scrollHeight;
+  }
+
+  async function doStep(s, my) {
+    stepNo++; stats();
+    if (s.p === "done") {
+      setActive(null); setPulseColor("var(--ink)");
+      setNow("Done", DONE_TEXT, "var(--c-observe)");
+      const r0 = radius;
+      await tween(dur(600), k => { radius = r0 * (1 - k); placePulse(); pushTrail(); }, my);
+      core.classList.remove("flash"); void core.getBBox(); core.classList.add("flash");
+      clearTrail(); pulse.style.opacity = 0; halo.style.opacity = 0;
+      const body = entry("done", "Answer", "done");
+      addTokens(220, "done");
+      await typeInto(body, s.t, my, 90);
+      curPhase = "done";
+      return;
+    }
+    setPulseColor(s.err ? "var(--c-error)" : colorFor(s.p));
+    await moveTo(s.p, my); if (my !== token) return;
+    curPhase = s.p; setActive(s.p);
+    const P = PHASES[s.p];
+    setNow(s.err ? "Observe · problem" : P.label, s.err ? ERROR_TEXT : P.text, s.err ? "var(--c-error)" : colorFor(s.p));
+
+    if (s.p === "perceive") {
+      const body = entry("perceive", "Perceive", "perceive");
+      addTokens(s.tok || 600, "perceive");
+      await typeInto(body, s.t, my, 70);
+    } else if (s.p === "reason") {
+      turns++; stats();
+      const body = entry("reason", "Reason", "reason");
+      addTokens(s.tok || 140, "reason");
+      await sleep(350);
+      await typeInto(body, s.t, my, 55);
+    } else if (s.p === "act") {
+      calls++; stats(); lastTool = s.tool;
+      const body = entry("act", "Act", "act");
+      const nm = document.createElement("span"); nm.className = "tool-name"; nm.textContent = TOOLS[s.tool].name + " › ";
+      body.appendChild(nm);
+      addTokens(s.tok || 70, "act");
+      await typeInto(body, s.t, my, 80);
+      await shoot(s.tool, false, false, my);
+    } else if (s.p === "observe") {
+      const tool = lastTool;
+      if (tool) await shoot(tool, true, s.err, my);
+      if (my !== token) return;
+      const body = entry(s.err ? "error" : "observe", s.err ? "Problem" : "Observe", s.err ? "error" : "observe");
+      addTokens(s.tok || 400, s.err ? "error" : "observe");
+      await typeInto(body, s.t, my, 75);
+    }
+  }
+
+  function waitGate() { return new Promise(r => { gate = r; }); }
+  function openGate() { if (gate) { const g = gate; gate = null; g(); } }
+
+  async function runLoop(my) {
+    while (idx < steps.length) {
+      if (!playing) await waitGate();
+      if (my !== token) return;
+      await doStep(steps[idx], my);
+      if (my !== token) return;
+      idx++;
+      await sleep(idx < steps.length && steps[idx].p === "act" ? 250 : 600);
+      if (my !== token) return;
+    }
+    ended = true; playing = false; updatePlay();
+  }
+
+  function updatePlay() { $("play").textContent = ended ? "Replay" : playing ? "Pause" : (idx === 0 ? "Run" : "Resume"); }
+
+  function reset(autoplay) {
+    token++; openGate();
+    const S = SCENARIOS[scKey], fail = $("fail").checked;
+    steps = S.steps.filter(s => !s.fail || fail);
+    idx = 0; ended = false; playing = false; curPhase = null; lastTool = null;
+    tokens = 0; turns = 0; calls = 0; stepNo = 0; stats();
+    angle = -90; radius = R; clearTrail(); placePulse();
+    pulse.style.opacity = 1; halo.style.opacity = .25; setPulseColor("var(--muted)");
+    packet.style.opacity = 0; core.classList.remove("flash", "thinking");
+    for (const k in beams) beams[k].classList.remove("on", "back", "bad");
+    for (const k in toolEls) toolEls[k].classList.remove("on", "back", "bad", "used");
+    setActive(null);
+    bar.innerHTML = ""; $("tokNow").textContent = "0";
+    log.innerHTML = "";
+    $("goalText").textContent = S.goal;
+    entry("user", "You", "user").textContent = S.goal;
+    setNow("Ready", "Press Run to start. The agent will loop through the four phases until it reaches the goal.");
+    runLoop(token);
+    if (autoplay) { playing = true; openGate(); }
+    updatePlay();
+  }
+
+  $("play").addEventListener("click", () => {
+    if (ended) { reset(true); return; }
+    playing = !playing; if (playing) openGate(); updatePlay();
+  });
+  $("step").addEventListener("click", () => {
+    if (ended) return;
+    if (playing) { playing = false; updatePlay(); return; }
+    openGate(); updatePlay();
+  });
+  $("reset").addEventListener("click", () => reset(false));
+  $("fail").addEventListener("change", () => reset(true));
+  document.querySelectorAll("[data-sc]").forEach(b => b.addEventListener("click", () => {
+    scKey = b.dataset.sc;
+    document.querySelectorAll("[data-sc]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    reset(true);
+  }));
+  $("speed").addEventListener("input", e => { speed = +e.target.value; $("speedOut").textContent = speed + "×"; });
+
+  if (reduce) document.querySelectorAll("svg.anim, .viz svg").forEach(s => s.pauseAnimations && s.pauseAnimations());
+
+  reset(false);
+  if (!reduce) setTimeout(() => { if (idx === 0 && !playing && !ended) { playing = true; openGate(); updatePlay(); } }, 900);
+})();
+</script>
+
+</body></html>

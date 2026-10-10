@@ -1,0 +1,1074 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Inside the Transformer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a lab bench — a sticky step rail on the left, one column of live, poke-able diagrams on the right.
+   Q / K / V each own a color everywhere on the page; blue is attention weight; vermilion/blue is a +/- vector value. */
+:root{
+  --bg:#EEF1F5; --surface:#FFFFFF; --sunk:#E3E8EF; --ink:#141B26; --muted:#566275; --line:#D2D9E3;
+  --accent:#2B53D6; --on-accent:#FFFFFF;
+  --q:#C08A0E; --k:#16927F; --v:#A93E86; --hot:#D2502B;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --gutter:clamp(16px,4vw,48px);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E131B; --surface:#161D28; --sunk:#1E2734; --ink:#E5EAF2; --muted:#98A4B6; --line:#2A3443;
+  --accent:#7D9BFF; --on-accent:#0E131B;
+  --q:#E5B341; --k:#3DC6B1; --v:#DD7BBE; --hot:#F2805C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E131B; --surface:#161D28; --sunk:#1E2734; --ink:#E5EAF2; --muted:#98A4B6; --line:#2A3443;
+  --accent:#7D9BFF; --on-accent:#0E131B;
+  --q:#E5B341; --k:#3DC6B1; --v:#DD7BBE; --hot:#F2805C; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.6;padding-inline:var(--gutter);padding-block:0 72px}
+.wrap{max-width:1180px;margin:0 auto}
+p{margin:0}
+h1,h2,h3{text-wrap:balance}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.mono{font-family:var(--mono)}
+.q-c{color:var(--q)} .k-c{color:var(--k)} .v-c{color:var(--v)}
+
+/* hero */
+.hero{padding-block:56px 32px;display:grid;gap:22px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(44px,8vw,96px);line-height:.92;letter-spacing:-.03em;margin:0}
+h1 em{font-style:normal;color:var(--accent)}
+.lead{max-width:62ch;font-size:clamp(17px,1.6vw,19px);color:var(--muted)}
+.hero-stage{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+#heroCanvas{width:100%;height:300px;display:block}
+.hero-legend{position:absolute;left:16px;top:12px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em}
+
+/* layout + rail */
+.layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:48px;align-items:start}
+.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);display:grid;gap:2px;padding-top:56px}
+.rail a{display:flex;align-items:center;gap:10px;color:var(--muted);text-decoration:none;padding:6px 8px;border-radius:8px;font-size:14px;transition:color .2s,background .2s}
+.rail a:hover{color:var(--ink);background:var(--sunk)}
+.rail .n{font-family:var(--mono);font-size:11px;width:24px;height:24px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);flex:none;transition:all .25s}
+.rail a.active{color:var(--ink);font-weight:600}
+.rail a.active .n{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+@media (max-width:920px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .rail{top:env(safe-area-inset-top,0px);z-index:10;display:flex;overflow-x:auto;gap:4px;padding:10px var(--gutter);margin-inline:calc(-1 * var(--gutter));background:var(--bg);border-bottom:1px solid var(--line);scrollbar-width:none}
+  .rail a{white-space:nowrap;padding:4px 10px 4px 4px}
+}
+
+/* sections */
+section.step{padding-block:56px;border-top:1px solid var(--line);display:grid;gap:22px;scroll-margin-top:64px}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.step h2{font-family:var(--display);font-weight:700;font-size:clamp(28px,4vw,44px);line-height:1.04;letter-spacing:-.015em;margin:0}
+.prose{max-width:66ch;display:grid;gap:12px;color:var(--ink)}
+.prose .dim{color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2.4vw,22px);display:grid;gap:16px;min-width:0}
+.panel h3{margin:0;font-family:var(--display);font-weight:700;font-size:19px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{font:500 14px/1 var(--body);border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 14px;border-radius:999px;cursor:pointer;transition:background .2s,border-color .2s,color .2s,transform .1s}
+.btn:hover{border-color:var(--muted)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.label{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.note{font-size:13px;color:var(--muted)}
+.formula{font-family:var(--mono);font-size:14px;background:var(--sunk);padding:10px 14px;border-radius:8px;overflow-x:auto;white-space:nowrap}
+.scroll{overflow-x:auto;min-width:0}
+.two{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px}
+@media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)}}
+.caption{font-size:15px;min-height:1.6em}
+.caption b{font-weight:600}
+
+/* 1 tokens */
+.inputrow{display:flex;gap:8px;flex-wrap:wrap}
+.inputrow input{flex:1 1 260px;min-width:0;font:16px var(--mono);padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.toks{display:flex;flex-wrap:wrap;gap:8px}
+.tok{display:grid;gap:2px;padding:8px 12px 6px;border-radius:10px;background:var(--sunk);border:1px solid var(--line);font-family:var(--mono);animation:pop .45s cubic-bezier(.2,1.4,.4,1) backwards}
+.tok.piece{border-style:dashed;border-color:var(--muted)}
+.tok .tt{font-size:15px;font-weight:500}
+.tok .ti{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+@keyframes pop{from{transform:translateY(8px) scale(.85);opacity:0}}
+
+/* 2 embeddings */
+.emb{display:grid;gap:4px}
+.emb .col{display:grid;gap:2px;min-width:0}
+.emb .lbl{font-family:var(--mono);font-size:11px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-bottom:4px}
+.emb .cell{height:13px;border-radius:2px;transition:background-color .6s ease}
+.emb .col.hl .lbl{color:var(--accent);font-weight:600}
+#peCanvas{width:100%;height:170px;display:block;border-radius:8px}
+
+/* 3 attention */
+#arcs{width:100%;height:auto;display:block}
+#arcs .arc{fill:none;stroke:var(--accent);stroke-linecap:round;animation:draw .8s ease-out backwards}
+@keyframes draw{from{stroke-dashoffset:1;stroke-dasharray:1}to{stroke-dashoffset:0;stroke-dasharray:1}}
+#arcs text{font-family:var(--mono);font-size:13px;fill:var(--ink)}
+#arcs .pct{font-size:11px;fill:var(--muted)}
+#arcs .qtok{cursor:pointer}
+#arcs .qtok rect{fill:var(--sunk);stroke:var(--line);transition:fill .2s}
+#arcs .qtok:hover rect{stroke:var(--q)}
+#arcs .qtok.on rect{fill:var(--q);stroke:var(--q)}
+#arcs .qtok.on text{fill:var(--surface);font-weight:600}
+#arcs .ktok rect{stroke:var(--k)}
+#arcs .ktok.masked rect{stroke:var(--line);stroke-dasharray:3 3}
+#arcs .ktok.masked text{fill:var(--muted);text-decoration:line-through}
+#arcs .rowlbl{font-size:10px;fill:var(--muted);letter-spacing:.1em}
+.steps{display:flex;flex-wrap:wrap;gap:6px}
+.steps .btn{font-size:13px;padding:7px 12px}
+table.att{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+table.att th{font-weight:500;text-align:left;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.att td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.att td.c{transition:opacity .4s}
+table.att .bar{height:10px;border-radius:5px;background:var(--accent);transition:width .6s cubic-bezier(.2,.8,.2,1);min-width:1px}
+table.att .barbox{width:90px;background:var(--sunk);border-radius:5px}
+table.att[data-step="1"] .c2, table.att[data-step="1"] .c3, table.att[data-step="1"] .c4,
+table.att[data-step="2"] .c3, table.att[data-step="2"] .c4,
+table.att[data-step="3"] .c4{opacity:.12}
+.strip{display:inline-flex;gap:1px;vertical-align:middle}
+.strip i{display:block;width:9px;height:14px;border-radius:2px}
+.outrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--mono);font-size:13px;transition:opacity .4s}
+.outrow .strip i{width:18px;height:20px}
+.hm{display:grid;gap:2px;font-family:var(--mono);font-size:10px}
+.hm .h{color:var(--muted);text-align:center;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;overflow:hidden;max-height:70px;justify-self:center;align-self:end}
+.hm .r{color:var(--muted);text-align:right;padding-right:4px;white-space:nowrap;align-self:center;cursor:pointer}
+.hm .r.on{color:var(--q);font-weight:600}
+.hm .cell{aspect-ratio:1;border-radius:3px;transition:background-color .5s;cursor:pointer;min-width:0}
+.hm .cell.masked{background:repeating-linear-gradient(45deg,var(--sunk) 0 3px,transparent 3px 6px)!important}
+.hm .cell.rowon{outline:1.5px solid var(--q);outline-offset:-1px}
+
+/* 4 multi-head */
+.heads{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.head{display:grid;gap:6px;min-width:0}
+.head canvas{width:100%;aspect-ratio:1;display:block;border-radius:6px;background:var(--sunk)}
+.head .hn{font-size:13px;font-weight:600}
+.head .hd{font-size:12px;color:var(--muted);line-height:1.4}
+@media (max-width:620px){.heads{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.mh-stage{position:relative;height:150px}
+.mh-stage .seg{position:absolute;top:0;height:22px;display:flex;gap:1px;transition:left .8s cubic-bezier(.6,0,.2,1),top .8s cubic-bezier(.6,0,.2,1),width .8s cubic-bezier(.6,0,.2,1)}
+.mh-stage .seg i{flex:1;border-radius:2px;outline:1px solid transparent}
+.mh-stage .seg[data-h="0"]{left:2%;width:21%} .mh-stage .seg[data-h="1"]{left:27%;width:21%}
+.mh-stage .seg[data-h="2"]{left:52%;width:21%} .mh-stage .seg[data-h="3"]{left:77%;width:21%}
+.mh-stage.joined .seg{top:56px;width:25%}
+.mh-stage.joined .seg[data-h="0"]{left:0} .mh-stage.joined .seg[data-h="1"]{left:25%}
+.mh-stage.joined .seg[data-h="2"]{left:50%} .mh-stage.joined .seg[data-h="3"]{left:75%}
+.mh-stage .wo{position:absolute;left:0;right:0;top:112px;height:26px;display:flex;gap:1px;opacity:.12;transition:opacity .6s}
+.mh-stage .wo i{flex:1;border-radius:2px;transition:background-color .6s}
+.mh-stage.mixed .wo{opacity:1}
+.mh-stage .tag{position:absolute;right:0;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.mh-stage .tag.t1{top:36px}.mh-stage .tag.t2{top:92px}
+
+/* 5 block */
+.block-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:760px){.block-grid{grid-template-columns:minmax(0,1fr)}}
+#blockSvg{width:100%;max-width:420px;height:auto;display:block;margin:0 auto}
+.bx rect{fill:var(--sunk);stroke:var(--line);stroke-width:1.5;transition:fill .25s,stroke .25s}
+.bx text{font-family:var(--body);font-size:14px;font-weight:600;fill:var(--ink);pointer-events:none}
+.bx{cursor:pointer}
+.bx:hover rect,.bx.on rect{stroke:var(--accent)}
+.bx.on rect{fill:var(--surface);stroke-width:2.5}
+.wire{fill:none;stroke:var(--muted);stroke-width:2}
+.wire.res{stroke:var(--v);stroke-dasharray:5 5}
+.svglbl{font-family:var(--mono);font-size:11px;fill:var(--muted)}
+.svglbl.v{fill:var(--v)}
+.info{display:grid;gap:8px}
+.info h3{font-size:22px}
+.ln{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;height:150px;position:relative;border-radius:8px;background:var(--sunk);padding:0 8px}
+.ln::after{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed var(--muted);opacity:.6}
+.ln .b{position:relative}
+.ln .b i{position:absolute;left:0;right:0;bottom:50%;height:66px;border-radius:3px 3px 0 0;background:var(--accent);transform-origin:bottom;transition:transform .9s cubic-bezier(.5,0,.2,1),background-color .4s}
+.stats{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+#ffnCanvas{width:100%;height:200px;display:block}
+
+/* 6 full model */
+#archSvg{width:100%;height:auto;display:block;max-width:760px;margin:0 auto}
+#archSvg .part{transition:opacity .4s}
+#archSvg .box rect{fill:var(--sunk);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s}
+#archSvg .box text{font-family:var(--body);font-size:13.5px;font-weight:600;fill:var(--ink)}
+#archSvg .box.attn rect{fill:color-mix(in srgb,var(--accent) 12%,var(--sunk))}
+#archSvg .box.ff rect{fill:color-mix(in srgb,var(--q) 14%,var(--sunk))}
+#archSvg .box.on rect{stroke:var(--accent);stroke-width:3;fill:var(--surface)}
+#archSvg .frame{fill:none;stroke:var(--line);stroke-width:1.5;stroke-dasharray:6 5}
+#archSvg .conn{fill:none;stroke:var(--muted);stroke-width:2}
+#archSvg .conn.on{stroke:var(--accent);stroke-width:3;stroke-dasharray:8 6;animation:flow .7s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-14}}
+#archSvg .txt{font-family:var(--mono);font-size:12px;fill:var(--muted)}
+#archSvg .big{font-family:var(--display);font-size:15px;font-weight:700;fill:var(--ink)}
+#archSvg .nx{font-family:var(--display);font-size:20px;font-weight:800;fill:var(--muted)}
+#archSvg .pe circle{fill:var(--surface);stroke:var(--muted);stroke-width:1.5}
+#archSvg .pe.on circle{stroke:var(--accent);stroke-width:3}
+#archSvg .pe text{font-family:var(--mono);font-size:16px;fill:var(--ink)}
+#archSvg .io text{font-family:var(--mono);font-size:13px;fill:var(--ink)}
+#archSvg .io.on text{fill:var(--accent);font-weight:600}
+#archSvg .dim{opacity:.13}
+.dots{display:flex;gap:6px;align-items:center}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--line);transition:background .3s,transform .3s}
+.dots i.on{background:var(--accent);transform:scale(1.3)}
+.stagecap{display:grid;gap:4px;min-height:96px}
+.stagecap h3{font-size:20px}
+
+/* 7 generation */
+.ctx{display:flex;flex-wrap:wrap;gap:6px;font-family:var(--mono)}
+.ctx span{padding:5px 10px;border-radius:8px;background:var(--sunk);border:1px solid var(--line);font-size:14px}
+.ctx span.prompt{color:var(--muted)}
+.ctx span.new{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface));animation:pop .5s cubic-bezier(.2,1.4,.4,1)}
+.cands{display:grid;gap:6px}
+.cand{display:grid;grid-template-columns:90px minmax(0,1fr) 60px 52px;gap:10px;align-items:center;font-family:var(--mono);font-size:14px;padding:4px 6px;border-radius:8px;transition:background .12s}
+.cand .bb{height:18px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.cand .bb i{display:block;height:100%;background:var(--accent);border-radius:4px;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.cand .p,.cand .lg{text-align:right;font-variant-numeric:tabular-nums}
+.cand .lg{color:var(--muted);font-size:12px}
+.cand.hit{background:color-mix(in srgb,var(--q) 28%,transparent)}
+.cand.win{background:color-mix(in srgb,var(--accent) 22%,transparent)}
+@media (max-width:480px){.cand{grid-template-columns:72px minmax(0,1fr) 52px}.cand .lg{display:none}}
+.slider{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}
+.slider input{width:200px;max-width:100%;accent-color:var(--accent)}
+
+footer{border-top:1px solid var(--line);padding-top:24px;display:grid;gap:8px;font-size:13px;color:var(--muted);max-width:72ch}
+footer a{color:var(--accent)}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">A hands-on walkthrough · “Attention Is All You Need”, 2017</div>
+    <h1>Inside the <em>Transformer</em></h1>
+    <p class="lead">Every modern language model is built from the same idea: let each word look at every other word, decide which ones matter, and blend their meaning in. Click, drag and replay each stage below to watch a sentence travel through the machine.</p>
+    <div class="hero-stage">
+      <div class="hero-legend">6 LAYERS · ATTENTION ARCS LIGHT UP AS THE SIGNAL RISES</div>
+      <canvas id="heroCanvas" aria-label="Animated sketch: tokens pass upward through six transformer layers while attention arcs connect them"></canvas>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="rail" aria-label="Steps">
+      <a href="#tokens"><span class="n">1</span>Tokens</a>
+      <a href="#embed"><span class="n">2</span>Embeddings</a>
+      <a href="#attention"><span class="n">3</span>Self-attention</a>
+      <a href="#heads"><span class="n">4</span>Multi-head</a>
+      <a href="#block"><span class="n">5</span>The block</a>
+      <a href="#model"><span class="n">6</span>Full model</a>
+      <a href="#generate"><span class="n">7</span>Generation</a>
+    </nav>
+
+    <main>
+      <!-- 1 -->
+      <section class="step" id="tokens">
+        <div class="kicker">Step 1 · Tokenize</div>
+        <h2>Text is chopped into tokens</h2>
+        <div class="prose">
+          <p>A model never sees letters. A tokenizer splits text into pieces from a fixed vocabulary and swaps each piece for an integer ID. Common words get one token; rare or long words are split into sub-word pieces (dashed below).</p>
+          <p class="dim">Type your own sentence. Every section further down updates to use it (up to 12 tokens).</p>
+        </div>
+        <div class="panel">
+          <div class="inputrow">
+            <input id="sentence" type="text" maxlength="90" aria-label="Sentence to tokenize" value="The cat sat on the mat because it was tired">
+            <button class="btn primary" id="tokBtn">Tokenize</button>
+          </div>
+          <div class="controls">
+            <span class="label">Try</span>
+            <button class="btn preset">The cat sat on the mat because it was tired</button>
+            <button class="btn preset">The animal didn't cross the road because it was scared</button>
+            <button class="btn preset">Transformers read every word simultaneously</button>
+          </div>
+          <div class="toks" id="tokRow"></div>
+          <p class="note" id="tokCount"></p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="step" id="embed">
+        <div class="kicker">Step 2 · Embed + add position</div>
+        <h2>Each token becomes a vector, stamped with its position</h2>
+        <div class="prose">
+          <p>An embedding table maps each token ID to a list of numbers (512 in the original paper, 16 drawn here). Similar words end up with similar vectors.</p>
+          <p>Attention by itself ignores word order: “dog bites man” and “man bites dog” would look identical. So a <b>positional encoding</b>, a pattern of sine and cosine waves at different frequencies, is added to each vector.</p>
+        </div>
+        <div class="panel">
+          <div class="controls" role="group" aria-label="What to show">
+            <button class="btn" data-emb="emb" aria-pressed="false">Word meaning</button>
+            <button class="btn" data-emb="pe" aria-pressed="false">Position signal</button>
+            <button class="btn" data-emb="sum" aria-pressed="true">Sum (model input)</button>
+            <button class="btn primary" id="embPlay">▶ Animate the addition</button>
+          </div>
+          <div class="emb" id="embGrid"></div>
+          <p class="caption" id="embCap"></p>
+          <div style="display:grid;gap:8px">
+            <div class="label">Positional encoding · x = position 0–47 · y = dimension 0–31</div>
+            <canvas id="peCanvas" aria-label="Heatmap of sinusoidal positional encodings"></canvas>
+            <div class="formula">PE(pos, 2i) = sin(pos / 10000<sup>2i/d</sup>) &nbsp;&nbsp; PE(pos, 2i+1) = cos(pos / 10000<sup>2i/d</sup>)</div>
+            <p class="note">Low dimensions (top) oscillate fast and high dimensions slowly, so every position gets a unique barcode. Hover a token column above to see its slice.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section class="step" id="attention">
+        <div class="kicker">Step 3 · Self-attention</div>
+        <h2>Every token asks a question of every other token</h2>
+        <div class="prose">
+          <p>Each vector is multiplied by three learned matrices to make a <b class="q-c">Query</b> (what am I looking for?), a <b class="k-c">Key</b> (what do I contain?) and a <b class="v-c">Value</b> (what do I pass on if chosen?).</p>
+          <p>A token’s query is compared with every key using a dot product. The scores are scaled, turned into percentages with softmax, and used to take a weighted average of the values. The result is a new vector for that token that carries in context from the words it attended to.</p>
+        </div>
+        <div class="formula">Attention(Q, K, V) = softmax( Q·Kᵀ / √d<sub>k</sub> ) · V &nbsp;&nbsp;&nbsp;with d<sub>k</sub> = 64, so √d<sub>k</sub> = 8</div>
+        <div class="panel">
+          <div class="controls">
+            <span class="label">Head</span>
+            <button class="btn headbtn" data-head="meaning" aria-pressed="true">Meaning links</button>
+            <button class="btn headbtn" data-head="prev" aria-pressed="false">Previous word</button>
+            <button class="btn headbtn" data-head="broad" aria-pressed="false">Broad context</button>
+            <button class="btn headbtn" data-head="same" aria-pressed="false">Same word</button>
+            <span style="flex:1"></span>
+            <button class="btn" id="maskBtn" aria-pressed="true">Causal mask: on</button>
+          </div>
+          <p class="note">Click a token in the top row to make it the query.</p>
+          <div class="scroll"><svg id="arcs" role="img" aria-label="Attention arcs from the query token to each key token"></svg></div>
+          <p class="caption" id="attCap"></p>
+        </div>
+        <div class="two">
+          <div class="panel">
+            <div class="controls" style="justify-content:space-between">
+              <h3>Step through the math</h3>
+              <button class="btn primary" id="attPlay">▶ Play</button>
+            </div>
+            <div class="steps" role="group" aria-label="Attention steps">
+              <button class="btn stepbtn" data-s="1">1 · Score</button>
+              <button class="btn stepbtn" data-s="2">2 · Scale</button>
+              <button class="btn stepbtn" data-s="3">3 · Softmax</button>
+              <button class="btn stepbtn" data-s="4">4 · Mix values</button>
+            </div>
+            <p class="note" id="stepText"></p>
+            <div class="scroll"><table class="att" id="attTable"></table></div>
+            <div class="outrow" id="outRow"></div>
+          </div>
+          <div class="panel">
+            <h3>The full attention matrix</h3>
+            <p class="note">Each row is one query; each column one key. Darker blue means more attention. Hatched cells are hidden by the causal mask: a token may not peek at words that come after it.</p>
+            <div class="scroll"><div class="hm" id="heatmap"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section class="step" id="heads">
+        <div class="kicker">Step 4 · Multi-head attention</div>
+        <h2>Several attention patterns run side by side</h2>
+        <div class="prose">
+          <p>One attention pattern can only capture one kind of relationship. So the model runs several <b>heads</b> in parallel, each with its own Q, K and V matrices. The original Transformer used 8 heads of 64 dimensions each; 8 × 64 = 512, the model width.</p>
+          <p>Each head’s output is concatenated, then a final matrix W<sub>O</sub> mixes them back into one vector per token.</p>
+        </div>
+        <div class="panel">
+          <div class="heads" id="headsGrid"></div>
+          <div class="controls" style="justify-content:space-between">
+            <span class="note" id="mhCap"></span>
+            <button class="btn primary" id="mhPlay">▶ Concatenate and mix</button>
+          </div>
+          <div class="mh-stage joined mixed" id="mhStage">
+            <div class="seg" data-h="0"></div><div class="seg" data-h="1"></div>
+            <div class="seg" data-h="2"></div><div class="seg" data-h="3"></div>
+            <span class="tag t1">concat · 4 heads × 4 dims</span>
+            <div class="wo" id="woRow"></div>
+            <span class="tag t2" style="top:142px">× W<sub>O</sub> → one blended vector</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section class="step" id="block">
+        <div class="kicker">Step 5 · The Transformer block</div>
+        <h2>Attention, then think, with shortcuts around both</h2>
+        <div class="prose">
+          <p>Attention moves information <i>between</i> tokens. A feed-forward network then processes each token <i>on its own</i>. Residual connections add each sub-layer’s input back onto its output, and layer normalization keeps the numbers in a stable range. Stack this block 6 times (or 96 times in large models) and you have a Transformer.</p>
+          <p class="dim">Click any box in the diagram to learn what it does.</p>
+        </div>
+        <div class="block-grid">
+          <div class="panel">
+            <svg id="blockSvg" viewBox="0 0 420 560" role="img" aria-label="Diagram of one transformer block with data pulses">
+              <path class="wire" id="bMain" d="M170 530 L170 30"/>
+              <path class="wire res" id="bRes1" d="M170 455 L330 455 L330 280 L272 280"/>
+              <path class="wire res" id="bRes2" d="M170 235 L330 235 L330 90 L272 90"/>
+              <text class="svglbl v" x="338" y="372">residual</text>
+              <text class="svglbl v" x="338" y="166">residual</text>
+              <g class="bx" data-b="mha" tabindex="0" role="button"><rect x="68" y="340" width="204" height="56" rx="10"/><text x="170" y="373" text-anchor="middle">Multi-head attention</text></g>
+              <g class="bx" data-b="an" tabindex="0" role="button"><rect x="68" y="262" width="204" height="36" rx="8"/><text x="170" y="285" text-anchor="middle">Add &amp; Norm</text></g>
+              <g class="bx" data-b="ffn" tabindex="0" role="button"><rect x="68" y="150" width="204" height="56" rx="10"/><text x="170" y="183" text-anchor="middle">Feed-forward</text></g>
+              <g class="bx" data-b="an" tabindex="0" role="button"><rect x="68" y="72" width="204" height="36" rx="8"/><text x="170" y="95" text-anchor="middle">Add &amp; Norm</text></g>
+              <text class="svglbl" x="170" y="550" text-anchor="middle">in: one vector per token</text>
+              <text class="svglbl" x="170" y="20" text-anchor="middle">out: same shape, richer meaning</text>
+              <g id="pulses"></g>
+            </svg>
+          </div>
+          <div class="panel info" id="blockInfo"></div>
+        </div>
+        <div class="two">
+          <div class="panel">
+            <div class="controls" style="justify-content:space-between">
+              <h3>Layer normalization</h3>
+              <button class="btn primary" id="lnBtn">Normalize</button>
+            </div>
+            <div class="ln" id="lnBars"></div>
+            <div class="stats"><span id="lnMean"></span><span id="lnStd"></span></div>
+            <p class="note">Rescales one token’s vector to mean 0 and spread 1, then applies a learned scale and shift. Without it, values drift and training becomes unstable as layers stack up.</p>
+          </div>
+          <div class="panel">
+            <div class="controls" style="justify-content:space-between">
+              <h3>Feed-forward network</h3>
+              <button class="btn primary" id="ffnBtn">⚡ Fire</button>
+            </div>
+            <canvas id="ffnCanvas" aria-label="Feed-forward network expanding 512 to 2048 to 512"></canvas>
+            <p class="note">Expands each vector 4× (512 → 2048), applies a non-linearity that switches many neurons off, then projects back to 512. Most of a model’s stored knowledge lives in these weights.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section class="step" id="model">
+        <div class="kicker">Step 6 · The whole architecture</div>
+        <h2>Encoder, decoder, and the families they spawned</h2>
+        <div class="prose">
+          <p>The 2017 model was built for translation. An <b>encoder</b> reads the full source sentence; a <b>decoder</b> writes the translation one token at a time, using <b>cross-attention</b> to look back at the encoder’s output. Later models kept only one half.</p>
+        </div>
+        <div class="panel">
+          <div class="controls" role="group" aria-label="Model family">
+            <button class="btn modebtn" data-mode="ed" aria-pressed="true">Encoder–decoder · original, T5</button>
+            <button class="btn modebtn" data-mode="do" aria-pressed="false">Decoder-only · GPT, Claude</button>
+            <button class="btn modebtn" data-mode="eo" aria-pressed="false">Encoder-only · BERT</button>
+          </div>
+          <div class="scroll">
+            <svg id="archSvg" viewBox="0 0 760 670" role="img" aria-label="Transformer architecture diagram"></svg>
+          </div>
+          <div class="stagecap" aria-live="polite"><h3 id="stTitle"></h3><p id="stText"></p></div>
+          <div class="controls">
+            <button class="btn" id="stPrev">← Back</button>
+            <button class="btn primary" id="stPlay">▶ Play</button>
+            <button class="btn" id="stNext">Next →</button>
+            <div class="dots" id="stDots"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section class="step" id="generate">
+        <div class="kicker">Step 7 · Generate</div>
+        <h2>Predict a token, append it, repeat</h2>
+        <div class="prose">
+          <p>The final layer’s vector for the last position is multiplied by a vocabulary-sized matrix, giving one score (a <b>logit</b>) per possible token. Softmax turns the scores into probabilities and one token is chosen. It is appended to the input and the whole sequence runs through the model again.</p>
+          <p class="dim"><b>Temperature</b> divides the logits before softmax. Low values sharpen the distribution toward the top choice; high values flatten it and make output more surprising.</p>
+        </div>
+        <div class="panel">
+          <div class="ctx" id="ctx" aria-live="polite"></div>
+          <div class="slider">
+            <label for="temp">Temperature</label>
+            <input id="temp" type="range" min="0.1" max="2" step="0.05" value="1">
+            <b class="mono" id="tempVal">1.00</b>
+          </div>
+          <div class="cands" id="cands"></div>
+          <div class="controls">
+            <button class="btn primary" id="sampleBtn">🎲 Sample next token</button>
+            <button class="btn" id="greedyBtn">Pick most likely</button>
+            <button class="btn" id="genReset">Reset</button>
+          </div>
+          <div class="formula">p(token) = softmax(logits / T)</div>
+        </div>
+      </section>
+
+      <footer>
+        <p>The attention weights, embeddings and next-token scores on this page are illustrative. They come from small hand-written rules so the patterns are easy to see. A trained model learns all of them from data, and its heads are usually messier.</p>
+        <p>Based on Vaswani et al., <a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">“Attention Is All You Need”</a> (2017). Dimensions quoted are from the base model: d<sub>model</sub> = 512, 8 heads, d<sub>ff</sub> = 2048, 6 layers.</p>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<script>
+(() => {
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const RM = matchMedia('(prefers-reduced-motion: reduce)');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- colors ---------- */
+let C = {};
+function readColors(){
+  const cs = getComputedStyle(document.documentElement);
+  ['bg','surface','sunk','ink','muted','line','accent','q','k','v','hot'].forEach(n => C[n] = cs.getPropertyValue('--' + n).trim());
+}
+function rgb(h){ h = h.replace('#',''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function mix(a, b, t){ const A = rgb(a), B = rgb(b); t = Math.max(0, Math.min(1, t)); return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * t)).join(',')})`; }
+function rgba(h, a){ const [r,g,b] = rgb(h); return `rgba(${r},${g},${b},${a})`; }
+const divc = v => mix(C.surface, v >= 0 ? C.hot : C.accent, Math.min(1, Math.abs(v)) * .92);
+const seqc = w => mix(C.surface, C.accent, Math.pow(w, .65));
+
+/* ---------- math helpers ---------- */
+function hash(str){ let h = 2166136261; for (const c of str){ h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const vecFor = (w, d = 16) => { const r = rng(hash(w.toLowerCase())); return Array.from({length: d}, () => r() * 2 - 1); };
+const peVec = (pos, d = 16) => Array.from({length: d}, (_, i) => { const w = 1 / Math.pow(10000, 2 * Math.floor(i / 2) / d); return i % 2 ? Math.cos(pos * w) : Math.sin(pos * w); });
+function softmax(a, T = 1){ const f = a.filter(isFinite); const m = Math.max(...f); const e = a.map(x => isFinite(x) ? Math.exp((x - m) / T) : 0); const s = e.reduce((p, c) => p + c, 0); return e.map(x => x / s); }
+const dot = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
+const cos = (a, b) => dot(a, b) / (Math.hypot(...a) * Math.hypot(...b) || 1);
+
+/* ---------- tokenizer + toy grammar ---------- */
+const LEX = {
+  det: 'the a an this that these those its his their my your our every'.split(' '),
+  pron: 'it they he she him them we i you her'.split(' '),
+  prep: 'on in at of to for with by from over under about into because and but or while across'.split(' '),
+  aux: "is was are were be been am has had have will would can could didn't don't isn't wasn't did does do".split(' '),
+  adj: 'tired big small red happy sleepy warm hungry old new lazy quick brown cold fast slow good bad scared afraid wide busy'.split(' '),
+  verb: 'sat ran ate saw slept jumped chased cross crossed read reads write wrote barked purred loves love see sees eat runs'.split(' ')
+};
+const ANIMATE = new Set('cat dog animal bird fox girl boy man woman child cats dogs people student teacher'.split(' '));
+function posOf(w){ w = w.toLowerCase(); if (!/[a-z0-9]/.test(w)) return 'punct'; for (const k in LEX) if (LEX[k].includes(w)) return k; if (/(ed|ing|ly)$/.test(w)) return w.endsWith('ly') ? 'adj' : 'verb'; return 'noun'; }
+function tokenize(text){
+  const words = text.match(/[A-Za-z']+|\d+|[^\sA-Za-z\d]/g) || [];
+  const out = [];
+  for (const w of words){
+    if (/^[A-Za-z']+$/.test(w) && w.length > 8){ out.push({t: w.slice(0, 5), word: w, piece: true}); out.push({t: '##' + w.slice(5), word: w, piece: true}); }
+    else out.push({t: w, word: w});
+    if (out.length >= 12) break;
+  }
+  return out.slice(0, 12).map((o, i) => ({...o, i, id: hash(o.t) % 50257, pos: posOf(o.word), vec: vecFor(o.t), val: vecFor(o.t + '#v', 8)}));
+}
+
+/* ---------- toy attention heads ---------- */
+const HEADS = {
+  meaning: {name: 'Meaning links', desc: 'Pronouns find nouns, verbs find subjects, adjectives find what they describe.'},
+  prev:    {name: 'Previous word', desc: 'Almost always looks one step back. Real models have heads like this.'},
+  broad:   {name: 'Broad context', desc: 'Spreads attention widely, with extra weight on the first token.'},
+  same:    {name: 'Same word', desc: 'Matches repeated words and itself.'}
+};
+function logit(head, i, j, T){
+  const a = T[i], b = T[j], d = Math.abs(i - j), before = j < i, after = j > i;
+  if (head === 'prev') return j === i - 1 ? 4 : (j === i ? 1.2 : -0.3 * d);
+  if (head === 'broad') return (j === 0 ? 1.4 : 0.25) - 0.03 * d + 0.15 * cos(a.vec, b.vec);
+  if (head === 'same') return (i === j ? 2.6 : 0) + (i !== j && a.word.toLowerCase() === b.word.toLowerCase() ? 3.2 : 0) + 0.5 * cos(a.vec, b.vec);
+  const pa = a.pos, pb = b.pos;
+  let s = 0.4 * cos(a.vec, b.vec) + (i === j ? 0.8 : 0);
+  if (i !== j && a.piece && b.piece && a.word === b.word) s += 3;
+  const nounish = pb === 'noun' || pb === 'pron';
+  if (pa === 'pron'){ if (pb === 'noun' && before) s += 4 - 0.1 * d + (ANIMATE.has(b.word.toLowerCase()) ? 1 : 0); }
+  else if (pa === 'adj'){ if (nounish) s += (after ? 2.2 : 2.6) - 0.12 * d; }
+  else if (pa === 'aux'){ if (nounish && before) s += 2.6 - 0.1 * d; if (pb === 'adj' && after) s += 2; }
+  else if (pa === 'verb'){ if (nounish && before) s += 3 - 0.15 * d; if (pb === 'noun' && after) s += 2.2 - 0.1 * d; }
+  else if (pa === 'noun'){ if (pb === 'det' && j === i - 1) s += 2; if (pb === 'adj' && d <= 2) s += 2.6; if (pb === 'verb') s += 1.6 - 0.1 * d; if (pb === 'prep' && before && d <= 2) s += 1.4; }
+  else if (pa === 'det'){ if (pb === 'noun' && after && d <= 2) s += 2.6; }
+  else if (pa === 'prep'){ if (pb === 'noun' && after) s += 2.2 - 0.2 * d; if (pb === 'verb' && before) s += 1.8 - 0.1 * d; }
+  else if (pa === 'punct'){ if (pb === 'verb' || pb === 'aux') s += 1.6; if (j === 0) s += 1; }
+  return s;
+}
+function attnRow(head, i, T = S.tokens, causal = S.causal){
+  const L = T.map((_, j) => causal && j > i ? -Infinity : logit(head, i, j, T));
+  return {L, W: softmax(L)};
+}
+
+/* ---------- state ---------- */
+const S = {tokens: [], q: 0, head: 'meaning', causal: true, step: 4, emb: 'sum', hlCol: -1};
+function setSentence(text){
+  S.tokens = tokenize(text);
+  if (!S.tokens.length) S.tokens = tokenize('The cat sat on the mat');
+  const it = S.tokens.findIndex(t => t.pos === 'pron');
+  S.q = it >= 0 ? it : S.tokens.length - 1;
+  renderTokens(); renderEmbed(); renderAttention(); renderHeads();
+}
+
+/* ---------- 1 tokens ---------- */
+function renderTokens(){
+  const box = $('#tokRow'); box.innerHTML = '';
+  S.tokens.forEach((t, i) => {
+    const el = document.createElement('div');
+    el.className = 'tok' + (t.piece ? ' piece' : '');
+    el.style.animationDelay = (i * 55) + 'ms';
+    el.innerHTML = `<span class="tt">${esc(t.t)}</span><span class="ti">#${t.id}</span>`;
+    box.append(el);
+  });
+  const pieces = S.tokens.filter(t => t.piece).length;
+  $('#tokCount').textContent = `${S.tokens.length} tokens${pieces ? `, ${pieces} of them sub-word pieces` : ''}. IDs index a vocabulary of 50,257 entries, the size used by GPT-2.`;
+}
+$('#tokBtn').onclick = () => setSentence($('#sentence').value);
+$('#sentence').addEventListener('keydown', e => { if (e.key === 'Enter') setSentence(e.target.value); });
+$$('.preset').forEach(b => b.onclick = () => { $('#sentence').value = b.textContent; setSentence(b.textContent); });
+
+/* ---------- 2 embeddings ---------- */
+const EMB_CAP = {
+  emb: '<b>Word meaning.</b> Looked up from the embedding table. The same word always gets the same vector, wherever it appears.',
+  pe: '<b>Position signal.</b> Depends only on the slot number. Notice how the top rows flip quickly from column to column while the bottom rows barely change.',
+  sum: '<b>Sum.</b> Meaning + position, added cell by cell. This is what enters the first layer. Two copies of “the” now differ because they sit in different places.'
+};
+function embVals(t, i){ const e = t.vec, p = peVec(i); return S.emb === 'emb' ? e : S.emb === 'pe' ? p : e.map((x, k) => (x + p[k]) / 1.6); }
+function renderEmbed(){
+  const g = $('#embGrid'); const n = S.tokens.length;
+  if (g.childElementCount !== n || g.dataset.sig !== S.tokens.map(t => t.t).join('|')){
+    g.dataset.sig = S.tokens.map(t => t.t).join('|');
+    g.style.gridTemplateColumns = `repeat(${n}, minmax(0,1fr))`;
+    g.innerHTML = S.tokens.map((t, i) => `<div class="col" data-i="${i}"><div class="lbl" title="${esc(t.t)}">${esc(t.t)}</div>${'<div class="cell"></div>'.repeat(16)}</div>`).join('');
+    $$('.col', g).forEach(c => {
+      c.onmouseenter = () => { S.hlCol = +c.dataset.i; c.classList.add('hl'); drawPE(); };
+      c.onmouseleave = () => { S.hlCol = -1; c.classList.remove('hl'); drawPE(); };
+    });
+  }
+  $$('.col', g).forEach((c, i) => {
+    const v = embVals(S.tokens[i], i);
+    $$('.cell', c).forEach((cell, k) => { cell.style.transitionDelay = (k * 25 + i * 15) + 'ms'; cell.style.backgroundColor = divc(v[k]); });
+  });
+  $$('[data-emb]').forEach(b => b.setAttribute('aria-pressed', b.dataset.emb === S.emb));
+  $('#embCap').innerHTML = EMB_CAP[S.emb];
+  drawPE();
+}
+$$('[data-emb]').forEach(b => b.onclick = () => { S.emb = b.dataset.emb; renderEmbed(); });
+let embTimer = [];
+$('#embPlay').onclick = () => {
+  embTimer.forEach(clearTimeout);
+  S.emb = 'emb'; renderEmbed();
+  embTimer = [setTimeout(() => { S.emb = 'pe'; renderEmbed(); }, 1300), setTimeout(() => { S.emb = 'sum'; renderEmbed(); }, 2700)];
+};
+function fitCanvas(cv){
+  const dpr = window.devicePixelRatio || 1, r = cv.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+  if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return {ctx, W: r.width, H: r.height};
+}
+function drawPE(){
+  const cv = $('#peCanvas'); const {ctx, W, H} = fitCanvas(cv);
+  const P = 48, D = 32, cw = W / P, ch = (H - 16) / D;
+  ctx.clearRect(0, 0, W, H);
+  for (let p = 0; p < P; p++){ const v = peVec(p, 64); for (let d = 0; d < D; d++){ ctx.fillStyle = divc(v[d]); ctx.fillRect(p * cw, d * ch, cw + .5, ch + .5); } }
+  ctx.fillStyle = C.accent;
+  S.tokens.forEach((_, i) => { ctx.beginPath(); ctx.moveTo(i * cw + cw / 2, H - 12); ctx.lineTo(i * cw + cw / 2 - 4, H - 4); ctx.lineTo(i * cw + cw / 2 + 4, H - 4); ctx.fill(); });
+  if (S.hlCol >= 0){ ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.strokeRect(S.hlCol * cw + 1, 1, cw - 2, D * ch - 2); }
+}
+
+/* ---------- 3 attention ---------- */
+const STEP_TEXT = {
+  1: '<b>Score.</b> Dot product of the query with each key: big when they point the same way.',
+  2: '<b>Scale.</b> Divide by √64 = 8 so scores stay in a range where softmax still has useful gradients.',
+  3: '<b>Softmax.</b> Exponentiate and normalize so the weights are positive and sum to 100%.',
+  4: '<b>Mix values.</b> Multiply each value vector by its weight and add them up. That sum is the new vector for the query token.'
+};
+function renderAttention(){
+  const T = S.tokens, n = T.length, qi = S.q;
+  const {L, W} = attnRow(S.head, qi);
+  /* arcs */
+  const svg = $('#arcs'); const Wd = Math.max(n * 80, 560), H = 258;
+  svg.setAttribute('viewBox', `0 0 ${Wd} ${H}`); svg.style.minWidth = (n * 62) + 'px';
+  const cell = Wd / n, x = k => cell * (k + .5), bw = Math.min(cell - 8, 90);
+  let s = `<text class="rowlbl" x="4" y="52">QUERY</text><text class="rowlbl" x="4" y="190">KEYS</text>`;
+  T.forEach((t, j) => {
+    if (!isFinite(L[j]) || W[j] < .004) return;
+    s += `<path class="arc" pathLength="1" d="M${x(qi)} 40 C ${x(qi)} 130, ${x(j)} 105, ${x(j)} 196" stroke-width="${(1 + 15 * W[j]).toFixed(2)}" stroke-opacity="${(0.14 + 0.86 * W[j]).toFixed(3)}" style="animation-delay:${Math.abs(j - qi) * 45}ms"/>`;
+  });
+  T.forEach((t, j) => {
+    const m = !isFinite(L[j]);
+    s += `<g class="qtok${j === qi ? ' on' : ''}" data-i="${j}" tabindex="0" role="button" aria-label="Use ${esc(t.t)} as the query"><rect x="${x(j) - bw / 2}" y="8" width="${bw}" height="30" rx="7"/><text x="${x(j)}" y="28" text-anchor="middle">${esc(t.t)}</text></g>`;
+    s += `<g class="ktok${m ? ' masked' : ''}"><rect x="${x(j) - bw / 2}" y="198" width="${bw}" height="30" rx="7" style="fill:${m ? C.surface : mix(C.surface, C.k, W[j] * 1.4 * .85)}"/><text x="${x(j)}" y="218" text-anchor="middle">${esc(t.t)}</text></g>`;
+    s += `<text class="pct" x="${x(j)}" y="248" text-anchor="middle">${m ? 'masked' : (W[j] * 100).toFixed(0) + '%'}</text>`;
+  });
+  svg.innerHTML = s;
+  $$('.qtok', svg).forEach(g => {
+    const go = () => { S.q = +g.dataset.i; renderAttention(); renderHeads(); };
+    g.onclick = go; g.onkeydown = e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } };
+  });
+  const order = W.map((w, j) => [w, j]).filter(([, j]) => j !== qi).sort((a, b) => b[0] - a[0]);
+  const top = order[0];
+  $('#attCap').innerHTML = top && top[0] > 0
+    ? `With the <b>${HEADS[S.head].name}</b> head, “<b class="q-c">${esc(T[qi].t)}</b>” puts <b>${(top[0] * 100).toFixed(0)}%</b> of its attention on “<b class="k-c">${esc(T[top[1]].t)}</b>” and ${(W[qi] * 100).toFixed(0)}% on itself. ${HEADS[S.head].desc}`
+    : `“<b class="q-c">${esc(T[qi].t)}</b>” is the first token, so with the causal mask on it can only attend to itself.`;
+  /* table */
+  const tb = $('#attTable'); tb.dataset.step = S.step;
+  const strip = (v, a = 1) => `<span class="strip">${v.map(x => `<i style="background:${divc(x)};opacity:${a}"></i>`).join('')}</span>`;
+  let rows = `<tr><th>Key</th><th>q·k</th><th>÷ 8</th><th>Softmax</th><th>× value</th></tr>`;
+  T.forEach((t, j) => {
+    if (!isFinite(L[j])) return;
+    rows += `<tr><td class="k-c">${esc(t.t)}</td><td class="c c1" data-n="${(L[j] * 8).toFixed(1)}">${(L[j] * 8).toFixed(1)}</td><td class="c c2" data-n="${L[j].toFixed(2)}">${L[j].toFixed(2)}</td>`
+      + `<td class="c c3"><div style="display:flex;align-items:center;gap:8px"><div class="barbox"><div class="bar" style="width:${S.step >= 3 ? W[j] * 100 : 0}%"></div></div><span>${(W[j] * 100).toFixed(1)}%</span></div></td>`
+      + `<td class="c c4">${strip(T[j].val.map(x => x * W[j] * 2.2))}</td></tr>`;
+  });
+  tb.innerHTML = rows;
+  const out = T[0].val.map((_, k) => T.reduce((s, t, j) => s + (isFinite(L[j]) ? W[j] * t.val[k] : 0), 0));
+  const o = $('#outRow'); o.style.opacity = S.step >= 4 ? 1 : .12;
+  o.innerHTML = `<span>new vector for “<b class="q-c">${esc(T[qi].t)}</b>” =</span>${strip(out.map(x => x * 1.6))}`;
+  $$('.stepbtn').forEach(b => b.setAttribute('aria-pressed', +b.dataset.s === S.step));
+  $('#stepText').innerHTML = STEP_TEXT[S.step];
+  renderHeatmap();
+}
+function renderHeatmap(){
+  const T = S.tokens, n = T.length, hm = $('#heatmap');
+  hm.style.gridTemplateColumns = `auto repeat(${n}, minmax(16px, 1fr))`;
+  let s = '<div></div>' + T.map(t => `<div class="h">${esc(t.t)}</div>`).join('');
+  T.forEach((t, i) => {
+    const {L, W} = attnRow(S.head, i);
+    s += `<div class="r${i === S.q ? ' on' : ''}" data-i="${i}">${esc(t.t)}</div>`;
+    W.forEach((w, j) => {
+      const m = !isFinite(L[j]);
+      s += `<div class="cell${m ? ' masked' : ''}${i === S.q ? ' rowon' : ''}" data-i="${i}" title="${esc(t.t)} → ${esc(T[j].t)}: ${m ? 'masked' : (w * 100).toFixed(1) + '%'}" style="background-color:${m ? 'transparent' : seqc(w)}"></div>`;
+    });
+  });
+  hm.innerHTML = s;
+  $$('[data-i]', hm).forEach(el => el.onclick = () => { S.q = +el.dataset.i; renderAttention(); renderHeads(); });
+}
+function countUp(sel){
+  if (RM.matches) return;
+  $$(sel, $('#attTable')).forEach(el => {
+    const target = parseFloat(el.dataset.n), dec = el.dataset.n.split('.')[1]?.length || 0, t0 = performance.now();
+    const tick = now => { const p = Math.min(1, (now - t0) / 550), e = 1 - Math.pow(1 - p, 3); el.textContent = (target * e).toFixed(dec); if (p < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+}
+function setStep(n){ S.step = n; renderAttention(); if (n <= 2) countUp('.c' + n); }
+$$('.stepbtn').forEach(b => b.onclick = () => { stopAttPlay(); setStep(+b.dataset.s); });
+let attTimer = null;
+function stopAttPlay(){ clearInterval(attTimer); attTimer = null; $('#attPlay').textContent = '▶ Play'; }
+$('#attPlay').onclick = () => {
+  if (attTimer){ stopAttPlay(); return; }
+  setStep(1); $('#attPlay').textContent = '❚❚ Pause';
+  attTimer = setInterval(() => { if (S.step >= 4){ stopAttPlay(); return; } setStep(S.step + 1); }, 1600);
+};
+$$('.headbtn').forEach(b => b.onclick = () => { S.head = b.dataset.head; $$('.headbtn').forEach(x => x.setAttribute('aria-pressed', x === b)); renderAttention(); });
+$('#maskBtn').onclick = e => { S.causal = !S.causal; e.target.setAttribute('aria-pressed', S.causal); e.target.textContent = 'Causal mask: ' + (S.causal ? 'on' : 'off'); renderAttention(); renderHeads(); };
+
+/* ---------- 4 multi-head ---------- */
+const HEAD_ORDER = ['prev', 'meaning', 'broad', 'same'];
+function renderHeads(){
+  const grid = $('#headsGrid');
+  if (!grid.childElementCount){
+    grid.innerHTML = HEAD_ORDER.map((h, k) => `<div class="head"><canvas data-h="${h}"></canvas><div class="hn">Head ${k + 1} · ${HEADS[h].name}</div><div class="hd">${HEADS[h].desc}</div></div>`).join('');
+  }
+  const T = S.tokens, n = T.length;
+  $$('canvas', grid).forEach(cv => {
+    const {ctx, W} = fitCanvas(cv); const c = W / n; ctx.clearRect(0, 0, W, W);
+    for (let i = 0; i < n; i++){
+      const {L, W: w} = attnRow(cv.dataset.h, i);
+      for (let j = 0; j < n; j++){ ctx.fillStyle = isFinite(L[j]) ? seqc(w[j]) : C.sunk; ctx.fillRect(j * c + .5, i * c + .5, c - 1, c - 1); }
+    }
+    ctx.strokeStyle = C.q; ctx.lineWidth = 2; ctx.strokeRect(1, S.q * c + 1, W - 2, c - 2);
+  });
+  const concat = [];
+  HEAD_ORDER.forEach((h, k) => {
+    const {L, W} = attnRow(h, S.q);
+    const o = [0, 1, 2, 3].map(d => T.reduce((s, t, j) => s + (isFinite(L[j]) ? W[j] * vecFor(t.t + h, 4)[d] : 0), 0) * 1.5);
+    concat.push(...o);
+    $(`.seg[data-h="${k}"]`).innerHTML = o.map(x => `<i style="background:${divc(x)}"></i>`).join('');
+  });
+  const r = rng(77); const Wo = Array.from({length: 16}, () => Array.from({length: 16}, () => r() * 2 - 1));
+  $('#woRow').innerHTML = Wo.map(col => `<i style="background:${divc(Math.tanh(dot(col, concat) * .45))}"></i>`).join('');
+  $('#mhCap').innerHTML = `Outputs for “<b class="q-c">${esc(T[S.q].t)}</b>”. Pick another query in step 3 or in a heatmap row.`;
+}
+let mhT = [];
+$('#mhPlay').onclick = () => {
+  mhT.forEach(clearTimeout);
+  const st = $('#mhStage'); st.classList.remove('joined', 'mixed');
+  mhT = [setTimeout(() => st.classList.add('joined'), 500), setTimeout(() => st.classList.add('mixed'), 1500)];
+};
+
+/* ---------- 5 block ---------- */
+const BLOCK_INFO = {
+  mha: ['Multi-head attention', 'The only place where tokens exchange information. Each position gathers what it needs from the others, as in steps 3 and 4.', 'mixes across tokens'],
+  an: ['Add & Norm', 'Adds the sub-layer’s input back to its output (the dashed residual path), then applies layer normalization. The residual path means each layer only has to learn a small <i>change</i> to the vector, which lets very deep stacks train.', 'output = LayerNorm(x + Sublayer(x))'],
+  ffn: ['Feed-forward network', 'Two linear layers with a non-linearity between them, applied to each token separately with the same weights. Attention gathers context; this part processes it.', 'FFN(x) = max(0, x·W₁ + b₁)·W₂ + b₂']
+};
+function showBlock(k, el){
+  $$('.bx').forEach(b => b.classList.toggle('on', b === el || (!el && b.dataset.b === k)));
+  const [h, p, f] = BLOCK_INFO[k];
+  $('#blockInfo').innerHTML = `<div class="label">Selected part</div><h3>${h}</h3><p>${p}</p><div class="formula">${f}</div><p class="note">Modern models usually put the norm <i>before</i> each sub-layer (“pre-norm”), which trains more stably at depth. The idea is the same.</p>`;
+}
+$$('.bx').forEach(b => { b.onclick = () => showBlock(b.dataset.b, b); b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); showBlock(b.dataset.b, b); } }; });
+showBlock('mha', $('.bx'));
+
+const pulsesG = $('#pulses'), NS = 'http://www.w3.org/2000/svg';
+const pulseDefs = [['bMain', 0, 'accent'], ['bMain', .33, 'accent'], ['bMain', .66, 'accent'], ['bRes1', .1, 'v'], ['bRes2', .55, 'v']];
+const pulses = pulseDefs.map(([id, off, col]) => { const c = document.createElementNS(NS, 'circle'); c.setAttribute('r', 6); c.style.fill = `var(--${col})`; pulsesG.append(c); return {path: $('#' + id), off, c, len: $('#' + id).getTotalLength()}; });
+function drawPulses(t){
+  pulses.forEach(p => { const u = ((t / 3800) + p.off) % 1; const pt = p.path.getPointAtLength(u * p.len); p.c.setAttribute('cx', pt.x); p.c.setAttribute('cy', pt.y); p.c.setAttribute('opacity', Math.min(1, Math.sin(u * Math.PI) * 2.2)); });
+}
+
+/* layer norm */
+const LN_RAW = [3.1, -0.4, 7.2, 1.0, -2.5, 4.4, 0.3, 5.9];
+let lnNorm = false;
+function renderLN(){
+  const box = $('#lnBars');
+  if (!box.childElementCount) box.innerHTML = LN_RAW.map(() => '<div class="b"><i></i></div>').join('');
+  const mean = LN_RAW.reduce((a, b) => a + b) / 8, sd = Math.sqrt(LN_RAW.reduce((a, b) => a + (b - mean) ** 2, 0) / 8);
+  const vals = lnNorm ? LN_RAW.map(v => (v - mean) / sd) : LN_RAW, max = lnNorm ? 2 : 8;
+  $$('.b i', box).forEach((el, k) => { el.style.transform = `scaleY(${vals[k] / max})`; el.style.backgroundColor = vals[k] >= 0 ? C.hot : C.accent; });
+  $('#lnMean').textContent = `mean ${lnNorm ? '0.00' : mean.toFixed(2)}`;
+  $('#lnStd').textContent = `spread ${lnNorm ? '1.00' : sd.toFixed(2)}`;
+  $('#lnBtn').textContent = lnNorm ? 'Show raw' : 'Normalize';
+}
+$('#lnBtn').onclick = () => { lnNorm = !lnNorm; renderLN(); };
+
+/* ffn */
+let ffnSeed = 3, ffnP = 1, ffnAnim = null;
+function drawFFN(){
+  const cv = $('#ffnCanvas'); const {ctx, W, H} = fitCanvas(cv);
+  ctx.clearRect(0, 0, W, H);
+  const r = rng(ffnSeed), nIn = 6, nH = 16, nOut = 6;
+  const xs = [W * .1, W * .5, W * .9];
+  const ys = (n, pad = 18) => Array.from({length: n}, (_, i) => pad + (H - 2 * pad - 14) * (n === 1 ? .5 : i / (n - 1)));
+  const yi = ys(nIn, 40), yh = ys(nH), yo = ys(nOut, 40);
+  const inV = yi.map(() => r() * 2 - 1);
+  const hid = yh.map(() => { const x = (r() * 2 - 1) * 2; return x * 0.5 * (1 + Math.tanh(0.7978 * (x + 0.044715 * x ** 3))); });
+  const hmax = Math.max(...hid, .01);
+  const outV = yo.map(() => Math.tanh(hid.reduce((s, h) => s + h * (r() * 2 - 1), 0)));
+  const p1 = Math.min(1, ffnP / .5), p2 = Math.max(0, (ffnP - .5) / .5);
+  ctx.lineWidth = 1;
+  yi.forEach(a => yh.forEach((b, k) => { ctx.strokeStyle = rgba(C.accent, .05 + .25 * p1 * Math.max(0, hid[k]) / hmax); ctx.beginPath(); ctx.moveTo(xs[0], a); ctx.lineTo(xs[1], b); ctx.stroke(); }));
+  yh.forEach((a, k) => yo.forEach(b => { ctx.strokeStyle = rgba(C.hot, .04 + .32 * p2 * Math.max(0, hid[k]) / hmax); ctx.beginPath(); ctx.moveTo(xs[1], a); ctx.lineTo(xs[2], b); ctx.stroke(); }));
+  const node = (x, y, fill, rad = 7) => { ctx.beginPath(); ctx.arc(x, y, rad, 0, 7); ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = C.line; ctx.stroke(); };
+  yi.forEach((y, k) => node(xs[0], y, divc(inV[k])));
+  yh.forEach((y, k) => node(xs[1], y, mix(C.sunk, C.accent, p1 >= 1 ? Math.max(0, hid[k]) / hmax : 0), 6));
+  yo.forEach((y, k) => node(xs[2], y, p2 >= .95 ? divc(outV[k]) : C.sunk));
+  ctx.fillStyle = C.muted; ctx.font = '11px ' + getComputedStyle(document.body).getPropertyValue('--mono'); ctx.textAlign = 'center';
+  ['512', '2048 (GELU)', '512'].forEach((l, k) => ctx.fillText(l, xs[k], H - 4));
+}
+$('#ffnBtn').onclick = () => {
+  ffnSeed++; cancelAnimationFrame(ffnAnim);
+  if (RM.matches){ ffnP = 1; drawFFN(); return; }
+  const t0 = performance.now();
+  const tick = now => { ffnP = Math.min(1, (now - t0) / 1500); drawFFN(); if (ffnP < 1) ffnAnim = requestAnimationFrame(tick); };
+  ffnAnim = requestAnimationFrame(tick);
+};
+
+/* ---------- 6 full architecture ---------- */
+function box(id, x, y, w, h, label, cls = ''){ return `<g class="part box ${cls}" data-p="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8"/><text x="${x + w / 2}" y="${y + h / 2 + 5}" text-anchor="middle">${label}</text></g>`; }
+function pe(id, cx, cy){ return `<g class="part pe" data-p="${id}"><circle cx="${cx}" cy="${cy}" r="13"/><text x="${cx}" y="${cy + 5}" text-anchor="middle">+</text><path d="M${cx - 62} ${cy} q6 -10 12 0 t12 0 t12 0" fill="none" stroke="currentColor" style="stroke:var(--muted)" stroke-width="1.5"/><text class="txt" x="${cx - 70}" y="${cy + 4}" text-anchor="end" style="font-size:11px;fill:var(--muted)">position</text></g>`; }
+function conn(id, d){ return `<path class="part conn" data-p="${id}" d="${d}"/>`; }
+const EX = 200, DX = 560, BW = 220;
+$('#archSvg').innerHTML = `
+  <rect class="part frame" data-p="enc-frame" x="${EX - 125}" y="300" width="250" height="218" rx="14"/>
+  <rect class="part frame" data-p="dec-frame" x="${DX - 125}" y="176" width="250" height="342" rx="14"/>
+  <text class="part nx" data-p="enc-frame" x="${EX - 140}" y="415" text-anchor="end">6×</text>
+  <text class="part nx" data-p="dec-frame" x="${DX + 140}" y="355">6×</text>
+  <text class="part big" data-p="enc-frame" x="${EX}" y="290" text-anchor="middle">ENCODER</text>
+    ${conn('ce0', `M${EX} 640 V 606`)}${conn('ce1', `M${EX} 570 V 553 M${EX} 527 V 499`)}
+  ${conn('ce2', `M${EX} 455 V 443`)}${conn('ce3', `M${EX} 415 V 404 M${EX} 360 V 348`)}
+  ${conn('c-mem', `M${EX} 320 V 250 H 395 V 377 H ${DX - BW / 2}`)}
+  ${conn('cd0', `M${DX} 640 V 606`)}${conn('cd1', `M${DX} 570 V 553 M${DX} 527 V 499`)}
+  ${conn('cd2', `M${DX} 455 V 443`)}${conn('cd3', `M${DX} 415 V 399`)}${conn('cd4', `M${DX} 355 V 343`)}
+  ${conn('cd5', `M${DX} 315 V 299`)}${conn('cd6', `M${DX} 255 V 243`)}
+  ${conn('cd7', `M${DX} 215 V 154`)}${conn('cd8', `M${DX} 120 V 106`)}${conn('cd9', `M${DX} 72 V 52`)}
+  <g class="part io" data-p="enc-in"><text x="${EX}" y="656" text-anchor="middle" id="encInTxt">The cat sat</text></g>
+  ${box('enc-emb', EX - BW / 2, 570, BW, 36, 'Input embedding')}
+  ${pe('enc-pe', EX, 540)}
+  ${box('enc-mha', EX - BW / 2, 455, BW, 44, 'Self-attention', 'attn')}
+  ${box('enc-an1', EX - BW / 2, 415, BW, 28, 'Add &amp; Norm')}
+  ${box('enc-ffn', EX - BW / 2, 360, BW, 44, 'Feed-forward', 'ff')}
+  ${box('enc-an2', EX - BW / 2, 320, BW, 28, 'Add &amp; Norm')}
+  <text class="part txt" data-p="c-mem" x="300" y="242">encoder output → keys &amp; values</text>
+  <g class="part io" data-p="dec-in"><text x="${DX}" y="656" text-anchor="middle" id="decInTxt">&lt;s&gt; Le chat</text></g>
+  ${box('dec-emb', DX - BW / 2, 570, BW, 36, 'Output embedding')}
+  ${pe('dec-pe', DX, 540)}
+  ${box('dec-mmha', DX - BW / 2, 455, BW, 44, 'Masked self-attention', 'attn')}
+  ${box('dec-an1', DX - BW / 2, 415, BW, 28, 'Add &amp; Norm')}
+  ${box('dec-xmha', DX - BW / 2, 355, BW, 44, 'Cross-attention', 'attn')}
+  ${box('dec-an2', DX - BW / 2, 315, BW, 28, 'Add &amp; Norm')}
+  ${box('dec-ffn', DX - BW / 2, 255, BW, 44, 'Feed-forward', 'ff')}
+  ${box('dec-an3', DX - BW / 2, 215, BW, 28, 'Add &amp; Norm')}
+  ${box('dec-lin', DX - BW / 2, 120, BW, 34, 'Linear → vocab scores')}
+  ${box('dec-sm', DX - BW / 2, 72, BW, 34, 'Softmax')}
+  <g class="part io" data-p="dec-out"><text x="${DX}" y="40" text-anchor="middle" id="decOutTxt">next token: “s’est”</text></g>
+  <text class="part big" data-p="dec-frame" x="${DX + 132}" y="196" text-anchor="end" style="font-size:12px;fill:var(--muted)">DECODER</text>
+  <g class="part" data-p="eo-head"><text class="txt" x="${EX}" y="232" text-anchor="middle">→ classifier / embeddings on top</text></g>
+`;
+const MODE = {
+  ed: {inE: 'The cat sat', inD: '<s> Le chat', out: 'next token: “s’est”'},
+  do: {inE: '', inD: 'The cat sat on the', out: 'next token: “mat”'},
+  eo: {inE: 'The cat sat', inD: '', out: ''}
+};
+const ENC = ['enc-frame', 'enc-in', 'enc-emb', 'enc-pe', 'enc-mha', 'enc-an1', 'enc-ffn', 'enc-an2', 'ce0', 'ce1', 'ce2', 'ce3'];
+const DEC = ['dec-frame', 'dec-in', 'dec-emb', 'dec-pe', 'dec-mmha', 'dec-an1', 'dec-xmha', 'dec-an2', 'dec-ffn', 'dec-an3', 'dec-lin', 'dec-sm', 'dec-out', 'cd0', 'cd1', 'cd2', 'cd3', 'cd4', 'cd5', 'cd6', 'cd7', 'cd8', 'cd9'];
+const STAGES = [
+  {m: 'ed eo', p: ['enc-in', 'enc-emb', 'ce0'], t: 'Source tokens become vectors', x: 'The sentence to translate is tokenized and each token is looked up in the embedding table.'},
+  {m: 'ed eo', p: ['enc-pe', 'ce1'], t: 'Add positional encoding', x: 'The sine-and-cosine position pattern from step 2 is added, so word order is not lost.'},
+  {m: 'ed eo', p: ['enc-mha', 'enc-an1', 'ce2'], t: 'Encoder self-attention (no mask)', x: 'Every source token can look at every other, both before and after it. The encoder sees the whole sentence at once.'},
+  {m: 'ed eo', p: ['enc-ffn', 'enc-an2', 'ce3', 'enc-frame'], t: 'Feed-forward, then repeat 6 times', x: 'Each token is processed on its own, and the whole block is stacked six times. Each pass refines the vectors further.'},
+  {m: 'eo', p: ['eo-head', 'enc-an2'], t: 'Encoder-only: use the vectors directly', x: 'BERT-style models stop here. The contextual vectors feed a small classifier, a search index, or a sentiment head. They understand text but do not generate it.'},
+  {m: 'ed', p: ['c-mem'], t: 'Hand the encoding to the decoder', x: 'The final encoder vectors become the keys and values that every decoder layer will consult.'},
+  {m: 'ed do', p: ['dec-in', 'dec-emb', 'dec-pe', 'cd0', 'cd1'], t: 'Feed in the output so far', x: 'The decoder gets the tokens generated so far, shifted right by one position, embedded and position-stamped exactly like the encoder input.'},
+  {m: 'ed do', p: ['dec-mmha', 'dec-an1', 'cd2', 'cd3'], t: 'Masked self-attention', x: 'Each output token attends only to earlier output tokens. The causal mask from step 3 stops it from cheating by looking at the answer.'},
+  {m: 'ed', p: ['dec-xmha', 'dec-an2', 'c-mem', 'cd4'], t: 'Cross-attention: consult the source', x: 'Queries come from the decoder; keys and values come from the encoder. This is where “chat” looks back at “cat”.'},
+  {m: 'ed do', p: ['dec-ffn', 'dec-an3', 'cd5', 'cd6', 'dec-frame'], t: 'Feed-forward, then repeat 6 times', x: 'Same as the encoder: process each position, then stack the block. GPT-3 uses 96 of these blocks; the idea does not change.'},
+  {m: 'ed do', p: ['dec-lin', 'dec-sm', 'dec-out', 'cd7', 'cd8', 'cd9'], t: 'Score every word in the vocabulary', x: 'The last vector is projected to one score per vocabulary token, and softmax turns those scores into probabilities. Step 7 lets you sample from them.'}
+];
+let mode = 'ed', stIdx = 0, stTimer = null;
+const stagesFor = () => STAGES.filter(s => s.m.split(' ').includes(mode));
+function renderArch(){
+  const st = stagesFor(); stIdx = Math.min(stIdx, st.length - 1);
+  const cur = st[stIdx];
+  const hidden = new Set(mode === 'do' ? [...ENC, 'c-mem', 'dec-xmha', 'dec-an2', 'cd4', 'eo-head'] : mode === 'eo' ? [...DEC, 'c-mem'] : ['eo-head']);
+  $$('#archSvg .part').forEach(el => {
+    const id = el.dataset.p;
+    el.classList.toggle('dim', hidden.has(id));
+    el.classList.toggle('on', cur.p.includes(id));
+  });
+  const M = MODE[mode];
+  $('#encInTxt').textContent = M.inE; $('#decInTxt').textContent = M.inD; $('#decOutTxt').textContent = M.out;
+  $('#stTitle').textContent = `${stIdx + 1}/${st.length} · ${cur.t}`; $('#stText').textContent = cur.x;
+  $('#stDots').innerHTML = st.map((_, k) => `<i class="${k === stIdx ? 'on' : ''}"></i>`).join('');
+  $('#stPrev').disabled = stIdx === 0; $('#stNext').disabled = stIdx === st.length - 1;
+  $$('.modebtn').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === mode));
+}
+function stopArch(){ clearInterval(stTimer); stTimer = null; $('#stPlay').textContent = '▶ Play'; }
+$('#stPrev').onclick = () => { stopArch(); stIdx = Math.max(0, stIdx - 1); renderArch(); };
+$('#stNext').onclick = () => { stopArch(); stIdx++; renderArch(); };
+$('#stPlay').onclick = () => {
+  if (stTimer){ stopArch(); return; }
+  if (stIdx >= stagesFor().length - 1) stIdx = 0;
+  renderArch(); $('#stPlay').textContent = '❚❚ Pause';
+  stTimer = setInterval(() => { if (stIdx >= stagesFor().length - 1){ stopArch(); return; } stIdx++; renderArch(); }, 2600);
+};
+$$('.modebtn').forEach(b => b.onclick = () => { stopArch(); mode = b.dataset.mode; stIdx = 0; renderArch(); });
+
+/* ---------- 7 generation ---------- */
+const PUNCT = [['.', 2.6], ['and', 2.0], ['because', 1.7], [',', 1.4], ['while', 1.0]];
+const NEXT = {
+  the: [['mat', 3.2], ['floor', 2.6], ['sofa', 2.3], ['roof', 1.6], ['keyboard', 1.4], ['moon', 0.2]],
+  a: [['cushion', 2.4], ['blanket', 2.2], ['chair', 1.8], ['box', 1.6], ['cloud', 0.3]],
+  on: [['the', 3.5], ['a', 2.0], ['its', 1.5], ['top', 0.6]],
+  its: [['bed', 2.2], ['paws', 2.0], ['tail', 1.8], ['owner', 1.3]],
+  '.': [['It', 2.5], ['The', 2.2], ['Then', 1.6], ['<end>', 1.9]],
+  and: [['purred', 2.6], ['slept', 2.4], ['watched', 1.8], ['the', 1.5], ['yawned', 1.4]],
+  ',': [['and', 2.0], ['then', 1.8], ['purring', 1.4], ['dreaming', 1.0]],
+  because: [['it', 2.9], ['the', 2.0], ['she', 1.0], ['nobody', 0.6]],
+  while: [['the', 2.4], ['it', 2.2], ['rain', 1.4]],
+  it: [['was', 3.0], ['felt', 2.0], ['liked', 1.8], ['purred', 1.2]],
+  she: [['was', 2.6], ['liked', 2.0], ['slept', 1.6]],
+  was: [['tired', 2.7], ['warm', 2.3], ['sleepy', 2.1], ['happy', 1.6], ['hungry', 1.4], ['a', 0.8]],
+  felt: [['warm', 2.6], ['safe', 2.2], ['sleepy', 2.0]],
+  liked: [['the', 2.5], ['warm', 1.8], ['its', 1.6]],
+  watched: [['the', 2.8], ['birds', 2.2], ['rain', 1.6]],
+  the_: [['cat', 3.0], ['sun', 2.0], ['dog', 1.8], ['room', 1.4]],
+  cat: [['yawned', 2.4], ['purred', 2.3], ['was', 2.0], ['sat', 1.8], ['stretched', 1.5]],
+  dog: [['barked', 2.6], ['slept', 2.0], ['was', 1.8]],
+  sun: [['was', 2.4], ['set', 2.0], ['warmed', 1.8]],
+  then: [['it', 2.6], ['the', 2.2], ['she', 1.0]],
+  for: [['hours', 2.8], ['a', 1.9], ['the', 1.2]],
+  quietly: [['.', 2.6], ['and', 1.8], ['for', 1.4]],
+  purring: [['softly', 2.4], ['.', 2.2]],
+  verb: [['.', 2.4], ['quietly', 2.0], ['on', 1.6], ['and', 1.4], ['for', 1.2]]
+};
+const VERBISH = /(ed|pt|at)$/;
+function candidates(ctx){
+  const last = ctx[ctx.length - 1], prev = ctx[ctx.length - 2];
+  const l = last.toLowerCase();
+  if (last === 'The' || (l === 'the' && prev === '.')) return NEXT.the_;
+  if (last === 'It') return NEXT.it;
+  if (last === 'Then') return NEXT.then;
+  if (NEXT[l]) return NEXT[l];
+  if (VERBISH.test(l) && !['mat', 'cat'].includes(l)) return NEXT.verb;
+  return PUNCT;
+}
+const PROMPT = ['The', 'cat', 'sat', 'on', 'the'];
+const G = {ctx: [...PROMPT], fresh: -1, busy: false};
+function dist(){ const c = candidates(G.ctx), T = +$('#temp').value; const p = softmax(c.map(x => x[1]), T); return c.map((x, k) => ({tok: x[0], lg: x[1], p: p[k]})); }
+function renderGen(){
+  $('#ctx').innerHTML = G.ctx.map((t, k) => `<span class="${k < PROMPT.length ? 'prompt' : ''}${k === G.fresh ? ' new' : ''}">${esc(t)}</span>`).join('');
+  const done = G.ctx[G.ctx.length - 1] === '<end>' || G.ctx.length >= 26;
+  const d = dist();
+  const box = $('#cands');
+  if (box.dataset.sig !== d.map(x => x.tok).join('|')){
+    box.dataset.sig = d.map(x => x.tok).join('|');
+    box.innerHTML = d.map(x => `<div class="cand"><span>${esc(x.tok)}</span><div class="bb"><i style="width:0"></i></div><span class="p"></span><span class="lg"></span></div>`).join('');
+    void box.offsetWidth;
+  }
+  $$('.cand', box).forEach((el, k) => { el.querySelector('i').style.width = (d[k].p * 100) + '%'; el.querySelector('.p').textContent = (d[k].p * 100).toFixed(1) + '%'; el.querySelector('.lg').textContent = 'z=' + d[k].lg.toFixed(1); el.classList.remove('hit', 'win'); });
+  $('#sampleBtn').disabled = $('#greedyBtn').disabled = done || G.busy;
+  $('#tempVal').textContent = (+$('#temp').value).toFixed(2);
+}
+function choose(greedy){
+  if (G.busy) return;
+  const d = dist(); let pick;
+  if (greedy) pick = d.reduce((b, x, k) => x.p > d[b].p ? k : b, 0);
+  else { let r = Math.random(), acc = 0; pick = d.length - 1; for (let k = 0; k < d.length; k++){ acc += d[k].p; if (r < acc){ pick = k; break; } } }
+  const els = $$('.cand');
+  const commit = () => { els[pick].classList.add('win'); setTimeout(() => { G.ctx.push(d[pick].tok); G.fresh = G.ctx.length - 1; G.busy = false; renderGen(); }, RM.matches ? 0 : 450); };
+  G.busy = true; renderGen();
+  if (RM.matches || greedy){ commit(); return; }
+  let hops = 10 + pick + d.length * 2, k = 0, delay = 45;
+  const hop = () => {
+    els.forEach(e => e.classList.remove('hit')); els[k % d.length].classList.add('hit');
+    if (hops-- <= 0 && k % d.length === pick){ els[pick].classList.remove('hit'); commit(); return; }
+    k++; delay *= 1.09; setTimeout(hop, delay);
+  };
+  hop();
+}
+$('#sampleBtn').onclick = () => choose(false);
+$('#greedyBtn').onclick = () => choose(true);
+$('#genReset').onclick = () => { G.ctx = [...PROMPT]; G.fresh = -1; G.busy = false; renderGen(); };
+$('#temp').oninput = renderGen;
+
+/* ---------- hero canvas ---------- */
+const HERO = tokenize('The cat sat on the mat because it was tired');
+function drawHero(t){
+  const cv = $('#heroCanvas'); const {ctx, W, H} = fitCanvas(cv);
+  ctx.clearRect(0, 0, W, H);
+  const toks = W < 560 ? HERO.slice(0, 6) : HERO, n = toks.length, Lr = 6;
+  const left = 30, right = W - 110, base = H - 34, topY = 46;
+  const xs = toks.map((_, i) => left + (right - left) * (i + .5) / n);
+  const ly = l => base - 22 - (base - 22 - topY) * l / (Lr - 1);
+  const mono = getComputedStyle(document.body).getPropertyValue('--mono');
+  const cyc = 5200, ph = (t % cyc) / cyc, wave = ph * (Lr + 1.6) - .8;
+  const heads = ['prev', 'meaning', 'broad', 'meaning', 'same', 'meaning'];
+  for (let l = 0; l < Lr; l++){
+    const y = ly(l), e = Math.exp(-((wave - l) ** 2) * 1.6);
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(left - 10, y); ctx.lineTo(right + 10, y); ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.font = `10px ${mono}`; ctx.textAlign = 'left'; ctx.fillText('L' + (l + 1), right + 18, y + 4);
+    if (e > .03){
+      const qi = (Math.floor(t / cyc) * 3 + l * 2 + 7) % n;
+      const {W: w} = attnRow(heads[l], qi, toks, true);
+      w.forEach((wt, j) => {
+        if (wt < .03) return;
+        const x1 = xs[qi], x2 = xs[j], h = Math.min(60, 10 + Math.abs(x1 - x2) * .35);
+        ctx.strokeStyle = rgba(C.accent, e * (.15 + .85 * wt)); ctx.lineWidth = 1 + 6 * wt * e;
+        ctx.beginPath(); ctx.moveTo(x1, y - 6);
+        if (qi === j) ctx.arc(x1, y - 14, 8, Math.PI * .5, Math.PI * 2.5); else ctx.bezierCurveTo(x1, y - h, x2, y - h, x2, y - 6);
+        ctx.stroke();
+      });
+    }
+    xs.forEach((x, i) => {
+      const v = toks[i].vec[(l * 3 + i) % 16];
+      ctx.fillStyle = mix(C.sunk, v >= 0 ? C.hot : C.accent, .25 + .75 * e * Math.abs(v));
+      const s = 9 + 5 * e; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - s / 2, y - s / 2, s, s, 3) : ctx.rect(x - s / 2, y - s / 2, s, s); ctx.fill();
+    });
+  }
+  ctx.fillStyle = C.ink; ctx.font = `12px ${mono}`; ctx.textAlign = 'center';
+  toks.forEach((tk, i) => ctx.fillText(tk.t, xs[i], H - 12));
+  const outA = Math.max(0, Math.min(1, (wave - Lr + 1.3) * 2.5));
+  ctx.globalAlpha = outA; ctx.textAlign = 'center'; ctx.fillStyle = C.accent; ctx.font = `600 13px ${mono}`;
+  ctx.fillText(W < 560 ? 'next → mat' : 'next token → “.”', xs[n - 1], 22); ctx.globalAlpha = 1;
+}
+
+/* ---------- loop, observers, theme ---------- */
+const vis = {hero: true, block: true};
+const io = new IntersectionObserver(es => es.forEach(e => vis[e.target.dataset.vis] = e.isIntersecting));
+$('.hero-stage').dataset.vis = 'hero'; $('#blockSvg').dataset.vis = 'block';
+io.observe($('.hero-stage')); io.observe($('#blockSvg'));
+function frame(t){
+  if (vis.hero) drawHero(t);
+  if (vis.block) drawPulses(t);
+  if (!RM.matches) requestAnimationFrame(frame);
+}
+const railLinks = $$('.rail a');
+const so = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting){ railLinks.forEach(a => { const on = a.getAttribute('href') === '#' + e.target.id; a.classList.toggle('active', on); if (on && innerWidth <= 920) a.scrollIntoView({block: 'nearest', inline: 'center'}); }); }
+}), {rootMargin: '-40% 0px -55% 0px'});
+$$('section.step').forEach(s => so.observe(s));
+
+function renderAll(){ readColors(); renderEmbed(); renderAttention(); renderHeads(); renderLN(); drawFFN(); renderGen(); renderArch(); drawHero(2600); drawPulses(1200); }
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderAll);
+new MutationObserver(renderAll).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { drawPE(); renderHeads(); drawFFN(); drawHero(2600); }, 120); });
+
+readColors();
+setSentence($('#sentence').value);
+renderLN(); drawFFN(); renderGen(); renderArch();
+drawHero(2600); drawPulses(1200);
+if (!RM.matches) requestAnimationFrame(frame);
+if (document.fonts) document.fonts.ready.then(() => { drawFFN(); drawHero(2600); });
+})();
+</script>
+
+</body></html>

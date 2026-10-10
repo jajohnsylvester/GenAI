@@ -1,0 +1,786 @@
+<title>Four Books, One Hundred Baggers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a long ledger-style page. Hero simulator, four book "lenses" as tabs, a dot-sieve funnel, a scorecard, then process + comparison. */
+:root{
+  --bg:#EAEFEB; --surface:#F7F9F6; --ink:#10231C; --muted:#4A5F57; --line:#C6D2CB;
+  --accent:#0B7A5A; --accent-ink:#FFFFFF;
+  --mayer:#3B4BC8; --lynch:#C85A0A; --coffee:#8A5528; --paul:#B0306E;
+  --good:#0B7A5A; --bad:#C2452F; --warn:#B7860B;
+  --f-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --f-body:'Public Sans','Segoe UI',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0B1612; --surface:#12211B; --ink:#E3EEE8; --muted:#93A9A0; --line:#274037;
+  --accent:#3CCB97; --accent-ink:#06130E;
+  --mayer:#9AA7FF; --lynch:#FF9A52; --coffee:#D6A46C; --paul:#F27FB2;
+  --good:#3CCB97; --bad:#FF7A66; --warn:#E3B341; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B1612; --surface:#12211B; --ink:#E3EEE8; --muted:#93A9A0; --line:#274037;
+  --accent:#3CCB97; --accent-ink:#06130E;
+  --mayer:#9AA7FF; --lynch:#FF9A52; --coffee:#D6A46C; --paul:#F27FB2;
+  --good:#3CCB97; --bad:#FF7A66; --warn:#E3B341; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.6 var(--f-body);padding-block:0 4rem}
+h1,h2,h3{font-family:var(--f-display);line-height:1.08;margin:0;text-wrap:balance;letter-spacing:-.01em}
+p{margin:0}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin-inline:auto;padding-inline:16px}
+@media(min-width:700px){.wrap{padding-inline:28px}}
+.eyebrow{font:500 .72rem/1 var(--f-mono);text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+section{padding-block:4.5rem 0}
+.sec-head{display:grid;gap:.8rem;margin-bottom:1.8rem;max-width:44rem}
+.sec-head h2{font-size:clamp(1.8rem,4vw,2.7rem);font-weight:800}
+.sec-head p{color:var(--muted)}
+
+/* progress + nav */
+.progress{position:fixed;inset:0 0 auto 0;height:3px;background:var(--accent);transform-origin:0 50%;transform:scaleX(0);z-index:30}
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;gap:1.4rem;align-items:center;overflow-x:auto;padding-block:.7rem;white-space:nowrap;scrollbar-width:none}
+nav b{font:800 1rem var(--f-display);margin-right:auto;min-width:max-content}
+nav a{font:500 .74rem var(--f-mono);text-transform:uppercase;letter-spacing:.1em;text-decoration:none;color:var(--muted)}
+nav a:hover{color:var(--ink)}
+
+/* hero */
+.hero{padding-block:3rem 0}
+.hero-grid{display:grid;gap:2.2rem;grid-template-columns:1fr}
+@media(min-width:900px){.hero-grid{grid-template-columns:1fr 1.05fr;align-items:center;gap:3rem}}
+.hero h1{font-size:clamp(2.4rem,6.2vw,4.6rem);font-weight:800;margin-block:1rem 1.2rem}
+.hero h1 em{font-style:normal;position:relative;white-space:nowrap}
+.hero h1 em::after{content:"";position:absolute;left:0;right:0;bottom:.04em;height:.14em;background:var(--accent);transform-origin:0 50%;animation:draw 1.1s .5s cubic-bezier(.2,.8,.2,1) backwards}
+@keyframes draw{from{transform:scaleX(0)}}
+.lede{font-size:1.12rem;color:var(--muted);max-width:34rem}
+.books{display:grid;grid-template-columns:repeat(auto-fit,minmax(10.5rem,1fr));gap:.6rem;margin-top:1.6rem}
+.books a{display:grid;gap:.15rem;text-decoration:none;padding:.7rem .8rem;border:1px solid var(--line);border-left:4px solid var(--c);background:var(--surface);transition:transform .25s,border-color .25s}
+.books a:hover{transform:translateY(-3px)}
+.books small{font:500 .7rem var(--f-mono);color:var(--muted)}
+.books strong{font:700 .95rem/1.2 var(--f-display)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:1.1rem}
+.sim-out{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem 1rem;margin-bottom:.4rem}
+.sim-out .big{font:800 clamp(1.9rem,4vw,2.7rem) var(--f-display);font-variant-numeric:tabular-nums}
+.sim-out .mult{font:500 .95rem var(--f-mono);color:var(--accent)}
+.sim-sub{color:var(--muted);font-size:.86rem}
+canvas{display:block;width:100%}
+#simCanvas{height:260px;margin-block:.6rem}
+.ctl{display:grid;gap:.2rem;margin-top:.6rem}
+.ctl label{display:flex;justify-content:space-between;font-size:.88rem;font-weight:500}
+.ctl output{font:500 .85rem var(--f-mono);color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent);height:1.6rem;margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.8rem}
+.chip{font:500 .74rem var(--f-mono);padding:.4rem .6rem;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:99px;cursor:pointer;transition:background .2s,color .2s}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* tabs */
+.tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.5rem;margin-bottom:1rem}
+.tab{text-align:left;font:inherit;padding:.8rem .9rem;border:1px solid var(--line);border-top:4px solid var(--c);background:var(--surface);color:var(--ink);cursor:pointer;transition:transform .2s,background .2s}
+.tab b{display:block;font:700 .98rem/1.2 var(--f-display)}
+.tab span{font:500 .7rem var(--f-mono);color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--c);color:var(--bg)}
+.tab[aria-selected="true"] span{color:inherit;opacity:.85}
+.tab:hover{transform:translateY(-2px)}
+.panel{display:grid;gap:1.6rem;border:1px solid var(--line);background:var(--surface);padding:1.2rem;border-top:4px solid var(--c);animation:pin .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes pin{from{transform:translateY(10px);opacity:.3}}
+@media(min-width:900px){.panel{grid-template-columns:1fr 1fr;padding:1.8rem;gap:2.4rem}}
+.panel>*{min-width:0}
+.panel h3{font-size:1.7rem;font-weight:800}
+.panel .by{font:500 .76rem var(--f-mono);color:var(--c);margin-block:.3rem .9rem}
+.panel .thesis{font-size:1.05rem;margin-bottom:1rem}
+.rules{list-style:none;margin:0;padding:0;display:grid;gap:.7rem}
+.rules li{display:grid;grid-template-columns:auto 1fr;gap:.8rem;align-items:start}
+.rules i{width:.7rem;height:.7rem;margin-top:.45rem;background:var(--c);transform:rotate(45deg)}
+.rules b{font-weight:600}
+.rules span{color:var(--muted);font-size:.93rem;display:block}
+.india{margin-top:1.1rem;padding:.8rem 1rem;border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 9%,transparent);font-size:.93rem}
+.india b{font:500 .7rem var(--f-mono);text-transform:uppercase;letter-spacing:.12em;display:block;margin-bottom:.2rem;color:var(--c)}
+.lab{display:grid;gap:.8rem;align-content:start}
+.lab h4{margin:0;font:500 .72rem var(--f-mono);text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+.lab-box{border:1px dashed var(--line);padding:1rem;display:grid;gap:.5rem}
+.bar-row{display:grid;grid-template-columns:5.6rem 1fr 4.4rem;gap:.6rem;align-items:center;font-size:.84rem}
+.bar-row .track{height:1.1rem;background:color-mix(in srgb,var(--ink) 8%,transparent);position:relative;overflow:hidden}
+.bar-row .fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--c);transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.bar-row .v{font:500 .85rem var(--f-mono);text-align:right}
+.hit{font:600 .95rem var(--f-display);padding:.6rem .8rem;background:color-mix(in srgb,var(--c) 14%,transparent);transition:background .3s}
+.cats{display:flex;flex-wrap:wrap;gap:.35rem}
+.cats span{font:500 .72rem var(--f-mono);padding:.3rem .55rem;border:1px solid var(--line);transition:all .3s}
+.cats span.on{background:var(--c);color:var(--bg);border-color:var(--c);transform:translateY(-2px)}
+.gauge{width:100%;max-width:340px;margin-inline:auto}
+.gauge .needle{transform-origin:120px 120px;transition:transform .9s cubic-bezier(.3,1.4,.5,1)}
+.mini{display:grid;gap:.25rem}
+.mini .cols{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;height:90px;align-items:end;position:relative}
+.mini .col{background:var(--good);height:0;transition:height .7s cubic-bezier(.2,.8,.2,1);transition-delay:calc(var(--i)*45ms);min-height:0}
+.mini .col.fail{background:var(--bad)}
+.mini .thr{position:absolute;left:0;right:0;border-top:1.5px dashed var(--ink);opacity:.55}
+.mini .thr em{position:absolute;right:0;top:-1.25rem;font:500 .66rem var(--f-mono);font-style:normal;background:var(--surface);padding-inline:.2rem}
+.mini .yrs{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;font:500 .62rem var(--f-mono);color:var(--muted);text-align:center}
+.mini .lbl{font-size:.82rem;font-weight:600}
+.seg{display:flex;flex-wrap:wrap;gap:.4rem}
+.radar{width:100%;max-width:340px;margin-inline:auto}
+.sq{display:grid;gap:.1rem}
+.sq label{display:flex;justify-content:space-between;font-size:.86rem}
+.sq label span{color:var(--muted)}
+.sq label b{font:500 .8rem var(--f-mono);color:var(--c)}
+.sq input{accent-color:var(--c)}
+
+/* sieve */
+.sieve{display:grid;gap:1.4rem}
+@media(min-width:960px){.sieve{grid-template-columns:minmax(0,5fr) minmax(0,7fr)}}
+.sieve>*{min-width:0}
+.presets{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.8rem}
+.frow{display:grid;grid-template-columns:auto 1fr;gap:.2rem .7rem;padding-block:.6rem;border-top:1px solid var(--line)}
+.frow input[type=checkbox]{width:1.15rem;height:1.15rem;accent-color:var(--accent);margin:.2rem 0 0}
+.frow .t{display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
+.frow .t b{font-weight:600;font-size:.94rem}
+.frow .t small{font:500 .68rem var(--f-mono);color:var(--muted)}
+.frow .rd{font:500 .78rem var(--f-mono);color:var(--accent)}
+.frow.off{opacity:.5}
+.frow>div:last-child{grid-column:2;display:grid;gap:.1rem}
+.arena{position:relative}
+.stat{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;align-items:baseline;margin-bottom:.5rem}
+.stat b{font:800 2.6rem var(--f-display);color:var(--accent);font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:.9rem}
+#dots{cursor:crosshair}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font:500 .72rem/1.5 var(--f-mono);padding:.4rem .6rem;border-radius:4px;opacity:0;transition:opacity .15s;z-index:5;white-space:nowrap}
+.funnel{display:grid;gap:.3rem;margin-top:1rem}
+.fr{display:grid;grid-template-columns:7.5rem 1fr 2.6rem;gap:.6rem;align-items:center;font-size:.8rem}
+.fr .tr{height:.8rem;background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.fr .fl{height:100%;background:var(--accent);width:100%;transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.fr.off{opacity:.4}
+.fr .n{font:500 .78rem var(--f-mono);text-align:right}
+.note{font-size:.8rem;color:var(--muted);margin-top:.8rem}
+
+/* scorecard */
+.score{display:grid;gap:1.4rem}
+@media(min-width:960px){.score{grid-template-columns:minmax(0,7fr) minmax(0,5fr)}}
+.score>*{min-width:0}
+.qgroup{border-top:3px solid var(--c);padding-top:.5rem;margin-bottom:1.2rem}
+.qgroup h3{font:700 1rem var(--f-display);color:var(--c);margin-bottom:.3rem}
+.q{display:grid;grid-template-columns:auto 1fr;gap:.7rem;padding:.5rem .3rem;cursor:pointer;align-items:start;transition:background .2s}
+.q:hover{background:color-mix(in srgb,var(--c) 8%,transparent)}
+.q input{width:1.15rem;height:1.15rem;margin:.2rem 0 0;accent-color:var(--c)}
+.q span{font-size:.93rem}
+.result{position:sticky;top:calc(env(safe-area-inset-top,0px) + 4rem);align-self:start}
+.rings{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;margin-block:1rem}
+.ring{text-align:center;font:500 .66rem var(--f-mono);color:var(--muted)}
+.ring svg{width:100%;max-width:74px}
+.ring circle{fill:none;stroke-width:6}
+.ring .bgc{stroke:color-mix(in srgb,var(--ink) 10%,transparent)}
+.ring .fgc{stroke:var(--c);stroke-linecap:round;transition:stroke-dashoffset .7s cubic-bezier(.2,.8,.2,1);transform:rotate(-90deg);transform-origin:50% 50%}
+.ring text{font:600 15px var(--f-display);fill:var(--ink);text-anchor:middle;dominant-baseline:central}
+.total{display:flex;align-items:baseline;gap:.6rem}
+.total b{font:800 3rem var(--f-display);font-variant-numeric:tabular-nums}
+.meter{height:.9rem;background:color-mix(in srgb,var(--ink) 8%,transparent);margin-block:.6rem}
+.meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .7s cubic-bezier(.2,.8,.2,1),background .4s}
+.verdict{font:700 1.15rem var(--f-display)}
+.vsub{color:var(--muted);font-size:.9rem}
+
+/* process */
+.steps{position:relative;display:grid;gap:1.2rem;padding-left:2.6rem;margin:0;list-style:none}
+.steps::before{content:"";position:absolute;left:.85rem;top:.5rem;bottom:.5rem;width:2px;background:var(--line)}
+.steps .rail{position:absolute;left:.85rem;top:.5rem;bottom:.5rem;width:2px;background:var(--accent);transform-origin:50% 0}
+.steps.play .rail{animation:rail 1.6s cubic-bezier(.4,0,.2,1) backwards}
+@keyframes rail{from{transform:scaleY(0)}}
+.steps li{position:relative;display:grid;gap:.25rem}
+.steps li::before{content:attr(data-n);position:absolute;left:-2.6rem;top:0;width:1.75rem;height:1.75rem;border-radius:50%;background:var(--bg);border:2px solid var(--accent);font:500 .75rem/1.55rem var(--f-mono);text-align:center}
+.steps h3{font-size:1.15rem}
+.steps p{color:var(--muted);max-width:44rem;font-size:.95rem}
+.steps .tag{font:500 .68rem var(--f-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--accent)}
+.flags{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.7rem;margin-top:2rem}
+.flag{border:1px solid var(--line);background:var(--surface);padding:.9rem 1rem;transition:transform .25s,border-color .25s}
+.flag:hover{transform:translateY(-3px);border-color:var(--bad)}
+.flag b{display:block;font:700 .98rem var(--f-display);color:var(--bad);margin-bottom:.2rem}
+.flag span{font-size:.88rem;color:var(--muted)}
+
+/* table */
+.tw{overflow-x:auto;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:.88rem}
+th,td{text-align:left;padding:.7rem .8rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 .7rem var(--f-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+tbody th{font:700 .95rem var(--f-display);text-transform:none;letter-spacing:0;color:var(--ink);border-left:4px solid var(--c)}
+tr:last-child td,tr:last-child th{border-bottom:0}
+
+footer{margin-top:4.5rem;border-top:1px solid var(--line);padding-top:1.4rem;color:var(--muted);font-size:.84rem;display:grid;gap:.5rem}
+footer b{color:var(--ink)}
+
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<div class="progress" id="progress"></div>
+<nav><div class="wrap">
+  <b>Four Books, One Hundred Baggers</b>
+  <a href="#math">The math</a><a href="#lenses">Four lenses</a><a href="#sieve">The sieve</a><a href="#scorecard">Scorecard</a><a href="#process">Process</a><a href="#compare">Compare</a>
+</div></nav>
+
+<header class="hero" id="math"><div class="wrap hero-grid">
+  <div>
+    <div class="eyebrow">Indian equities · a reading guide</div>
+    <h1>How to find a <em>100-bagger</em> on NSE and BSE</h1>
+    <p class="lede">A hundred-fold return takes a business that keeps growing and an investor who keeps holding. Four books describe how to spot one. Play with the numbers, filter a simulated market, then score a company of your own.</p>
+    <div class="books">
+      <a href="#lenses" data-go="mayer" style="--c:var(--mayer)"><small>Christopher Mayer</small><strong>100 Baggers</strong></a>
+      <a href="#lenses" data-go="lynch" style="--c:var(--lynch)"><small>Peter Lynch</small><strong>One Up on Wall Street</strong></a>
+      <a href="#lenses" data-go="coffee" style="--c:var(--coffee)"><small>Saurabh Mukherjea</small><strong>Coffee Can Investing</strong></a>
+      <a href="#lenses" data-go="paul" style="--c:var(--paul)"><small>Prasenjit Paul</small><strong>Multibaggers</strong></a>
+    </div>
+  </div>
+  <div class="card" aria-label="Compounding simulator">
+    <div class="eyebrow">What does ₹1 lakh become?</div>
+    <div class="sim-out"><span class="big" id="simValue">₹1 crore</span><span class="mult" id="simMult">100x</span></div>
+    <div class="sim-sub" id="simSub">At 25.9% a year for 20 years</div>
+    <canvas id="simCanvas" role="img" aria-label="Growth of ₹1 lakh over time at the chosen rate, compared with a fixed deposit and an index"></canvas>
+    <div class="ctl"><label for="cagr">Compounding rate <output id="cagrOut">26%</output></label><input id="cagr" type="range" min="8" max="45" step="0.5" value="25.9"></div>
+    <div class="ctl"><label for="yrs">Years you hold <output id="yrsOut">20</output></label><input id="yrs" type="range" min="3" max="30" step="1" value="20"></div>
+    <div class="chips" id="reqChips" aria-label="Rate needed for 100x"></div>
+    <div class="chips"><button class="chip" id="scaleBtn" aria-pressed="true">Log scale</button></div>
+  </div>
+</div></header>
+
+<main class="wrap">
+
+<section id="lenses">
+  <div class="sec-head">
+    <div class="eyebrow">Four lenses</div>
+    <h2>Each book asks a different question about the same stock</h2>
+    <p>Pick a book. The left side is its argument and how it reads in an Indian market. The right side is a small lab you can move.</p>
+  </div>
+  <div class="tabs" role="tablist" aria-label="Books">
+    <button class="tab" role="tab" id="t-mayer" aria-controls="p-mayer" aria-selected="true" style="--c:var(--mayer)"><span>2015 · Mayer</span><b>100 Baggers</b></button>
+    <button class="tab" role="tab" id="t-lynch" aria-controls="p-lynch" aria-selected="false" style="--c:var(--lynch)"><span>1989 · Lynch</span><b>One Up on Wall Street</b></button>
+    <button class="tab" role="tab" id="t-coffee" aria-controls="p-coffee" aria-selected="false" style="--c:var(--coffee)"><span>2018 · Mukherjea</span><b>Coffee Can Investing</b></button>
+    <button class="tab" role="tab" id="t-paul" aria-controls="p-paul" aria-selected="false" style="--c:var(--paul)"><span>Prasenjit Paul</span><b>Multibaggers</b></button>
+  </div>
+
+  <!-- MAYER -->
+  <div class="panel" role="tabpanel" id="p-mayer" aria-labelledby="t-mayer" style="--c:var(--mayer)">
+    <div>
+      <h3>100 Baggers</h3>
+      <div class="by">Christopher W. Mayer · 365 US stocks that returned 100x, 1962–2014</div>
+      <p class="thesis">Hundred-fold winners share a pattern. Earnings grow for a long time, the market pays a higher multiple for them, and the owner never sells the compounding.</p>
+      <ul class="rules">
+        <li><i></i><div><b>Twin engines</b><span>Earnings growth and a rising P/E multiply together. One alone rarely reaches 100x.</span></div></li>
+        <li><i></i><div><b>Start small</b><span>Most winners began as small companies with a large market still ahead of them.</span></div></li>
+        <li><i></i><div><b>High returns on capital, low debt</b><span>The business funds its own growth. Look for ROE or ROCE well above 15%.</span></div></li>
+        <li><i></i><div><b>Owner-operators and a moat</b><span>Founders with real stakes, and an advantage that is hard to copy.</span></div></li>
+        <li><i></i><div><b>Time</b><span>Many 100-baggers took twenty years or more. The coffee can idea: buy, then leave it alone.</span></div></li>
+      </ul>
+      <div class="india"><b>In India</b>Start with ₹500–5,000 crore companies in categories where Indian per-capita use is still low. Prefer promoter-led firms with steady ROCE, and check how much of the market they can still capture.</div>
+    </div>
+    <div class="lab">
+      <h4>Lab · the twin engines</h4>
+      <div class="lab-box">
+        <div class="ctl"><label for="mEps">Earnings growth a year <output id="mEpsO"></output></label><input id="mEps" type="range" min="5" max="30" step="1" value="15"></div>
+        <div class="ctl"><label for="mYrs">Years <output id="mYrsO"></output></label><input id="mYrs" type="range" min="5" max="30" step="1" value="20"></div>
+        <div class="ctl"><label for="mPe0">P/E when you buy <output id="mPe0O"></output></label><input id="mPe0" type="range" min="6" max="30" step="1" value="12"></div>
+        <div class="ctl"><label for="mPe1">P/E when the market notices <output id="mPe1O"></output></label><input id="mPe1" type="range" min="6" max="60" step="1" value="30"></div>
+      </div>
+      <div class="lab-box">
+        <div class="bar-row"><span>Earnings</span><div class="track"><div class="fill" id="mB1"></div></div><span class="v" id="mV1"></span></div>
+        <div class="bar-row"><span>P/E multiple</span><div class="track"><div class="fill" id="mB2"></div></div><span class="v" id="mV2"></span></div>
+        <div class="bar-row"><span><b>Share price</b></span><div class="track"><div class="fill" id="mB3"></div></div><span class="v" id="mV3"></span></div>
+        <div class="hit" id="mHit"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LYNCH -->
+  <div class="panel" role="tabpanel" id="p-lynch" aria-labelledby="t-lynch" style="--c:var(--lynch)" hidden>
+    <div>
+      <h3>One Up on Wall Street</h3>
+      <div class="by">Peter Lynch · the ten-bagger and the two-minute story</div>
+      <p class="thesis">You already see great businesses in daily life, before analysts do. Research them, sort them into a type, and pay a fair price for the growth.</p>
+      <ul class="rules">
+        <li><i></i><div><b>Invest in what you know</b><span>The shop, product or software your work or family uses. Then confirm the numbers.</span></div></li>
+        <li><i></i><div><b>Know which of six types it is</b><span>Slow growers, stalwarts, fast growers, cyclicals, turnarounds, asset plays. Each has its own rules for buying and selling.</span></div></li>
+        <li><i></i><div><b>PEG at or below 1</b><span>P/E divided by the earnings growth rate. A fair price for growth sits near 1, and above 2 is expensive.</span></div></li>
+        <li><i></i><div><b>Two-minute story</b><span>If you cannot explain why it will grow in two minutes, you do not own it, you only hold a ticker.</span></div></li>
+        <li><i></i><div><b>Avoid hot stocks and "diworsification"</b><span>Be wary of fashionable sectors and of firms that buy unrelated businesses.</span></div></li>
+      </ul>
+      <div class="india"><b>In India</b>Notice the brand sold in every kirana, the bank your office uses, the supplier your employer depends on. Look for fast growers near 20–25% earnings growth, and treat very high rates with suspicion.</div>
+    </div>
+    <div class="lab">
+      <h4>Lab · the PEG gauge</h4>
+      <div class="lab-box">
+        <div class="ctl"><label for="lPe">P/E ratio <output id="lPeO"></output></label><input id="lPe" type="range" min="5" max="80" step="1" value="30"></div>
+        <div class="ctl"><label for="lG">Earnings growth a year <output id="lGO"></output></label><input id="lG" type="range" min="1" max="45" step="1" value="25"></div>
+      </div>
+      <div class="lab-box">
+        <svg class="gauge" viewBox="0 0 240 150" role="img" aria-label="PEG gauge">
+          <path id="gz1" fill="none" stroke="var(--good)" stroke-width="16"/>
+          <path id="gz2" fill="none" stroke="var(--warn)" stroke-width="16"/>
+          <path id="gz3" fill="none" stroke="var(--bad)" stroke-width="16"/>
+          <g class="needle" id="needle"><line x1="120" y1="120" x2="44" y2="120" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/></g>
+          <circle cx="120" cy="120" r="7" fill="var(--ink)"/>
+          <text x="22" y="144" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono,monospace">0</text>
+          <text x="86" y="26" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono,monospace">1</text>
+          <text x="146" y="26" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono,monospace">2</text>
+          <text x="208" y="144" font-size="11" fill="var(--muted)" font-family="IBM Plex Mono,monospace">3+</text>
+        </svg>
+        <div class="hit" id="lHit"></div>
+        <div class="cats" id="lCats"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COFFEE CAN -->
+  <div class="panel" role="tabpanel" id="p-coffee" aria-labelledby="t-coffee" style="--c:var(--coffee)" hidden>
+    <div>
+      <h3>Coffee Can Investing</h3>
+      <div class="by">Saurabh Mukherjea with Pranab Uniyal and Rakshit Ranjan · built on Indian data</div>
+      <p class="thesis">Pick a few companies with a long, boring record of high returns and steady growth, put them in the coffee can, and do not open it for ten years.</p>
+      <ul class="rules">
+        <li><i></i><div><b>Ten-year record, every year</b><span>Revenue growth of at least 10% and ROCE of at least 15%, in each of ten years. A good average is not enough.</span></div></li>
+        <li><i></i><div><b>Skip the lumpy and the fading</b><span>Cyclical swings and slow declines fail the test even when a single year looks great.</span></div></li>
+        <li><i></i><div><b>Check the accounts</b><span>Profit should turn into cash, capital should be allocated sensibly, and the reported numbers should be clean.</span></div></li>
+        <li><i></i><div><b>Buy and do not trade</b><span>Low turnover is part of the method. Selling winners is the usual way investors give up the return.</span></div></li>
+      </ul>
+      <div class="india"><b>In India</b>Pull ten years of sales and ROCE from a screener, drop banks and other lenders from this particular test, then read cash flow and promoter pledging before you buy.</div>
+    </div>
+    <div class="lab">
+      <h4>Lab · ten years under the microscope</h4>
+      <div class="seg" id="cSel">
+        <button class="chip" data-k="A" aria-pressed="true">Company A</button>
+        <button class="chip" data-k="B" aria-pressed="false">Company B</button>
+        <button class="chip" data-k="C" aria-pressed="false">Company C</button>
+      </div>
+      <div class="lab-box">
+        <div class="mini"><div class="lbl">Revenue growth, % (bar must reach the line)</div><div class="cols" id="cRev"></div></div>
+        <div class="mini"><div class="lbl">ROCE, %</div><div class="cols" id="cRoce"></div><div class="yrs" id="cYrs"></div></div>
+        <div class="hit" id="cHit"></div>
+      </div>
+      <p class="note">Illustrative figures for three made-up companies, not real data.</p>
+    </div>
+  </div>
+
+  <!-- PAUL -->
+  <div class="panel" role="tabpanel" id="p-paul" aria-labelledby="t-paul" style="--c:var(--paul)" hidden>
+    <div>
+      <h3>Multibaggers</h3>
+      <div class="by">Prasenjit Paul · the SQGLP checklist for Indian small caps</div>
+      <p class="thesis">Multibaggers cluster in small companies run by people you can trust, growing for years, at a price that still leaves room. Score each trait, and walk away if one is missing.</p>
+      <ul class="rules">
+        <li><i></i><div><b>S · Small size</b><span>Low market value leaves room to grow several-fold.</span></div></li>
+        <li><i></i><div><b>Q · Quality</b><span>Quality of the business and, above all, of the management and its governance.</span></div></li>
+        <li><i></i><div><b>G · Growth</b><span>Earnings that can compound for many years, with a clear reason why.</span></div></li>
+        <li><i></i><div><b>L · Longevity</b><span>A franchise that will still be needed in twenty years.</span></div></li>
+        <li><i></i><div><b>P · Price</b><span>Reasonable against the growth you expect. A great business bought dear returns less.</span></div></li>
+      </ul>
+      <div class="india"><b>In India</b>Small and micro caps carry governance risk, thin trading and sudden regulatory attention. Spend the most time on Q, and size the position so a miss does not hurt.</div>
+    </div>
+    <div class="lab">
+      <h4>Lab · score a company on SQGLP</h4>
+      <div class="lab-box">
+        <svg class="radar" viewBox="0 0 340 300" id="radar" role="img" aria-label="SQGLP radar chart"></svg>
+        <div class="hit" id="pHit"></div>
+      </div>
+      <div class="lab-box" id="pSliders"></div>
+    </div>
+  </div>
+</section>
+
+<section id="sieve">
+  <div class="sec-head">
+    <div class="eyebrow">The sieve</div>
+    <h2>Stack the books' filters and watch the market thin out</h2>
+    <p>300 simulated listed companies. Switch filters on, move the thresholds, or load one author's set. A few survive when you ask for size, quality, growth, price and safety at once.</p>
+  </div>
+  <div class="sieve">
+    <div>
+      <div class="presets" id="presets"></div>
+      <div id="filters"></div>
+    </div>
+    <div class="arena card">
+      <div class="stat"><b id="surv">0</b><span id="survTxt">of 300 simulated companies pass</span></div>
+      <canvas id="dots" aria-label="Grid of 300 simulated companies. Passing companies are highlighted."></canvas>
+      <div class="tip" id="tip"></div>
+      <div class="funnel" id="funnel"></div>
+      <button class="chip" id="replay" style="margin-top:.8rem">Replay the sieve</button>
+      <p class="note">Random data made for this page. It shows how filters combine, not which stocks to buy. Hover a dot for its numbers.</p>
+    </div>
+  </div>
+</section>
+
+<section id="scorecard">
+  <div class="sec-head">
+    <div class="eyebrow">Scorecard</div>
+    <h2>Score a company against all four books</h2>
+    <p>Tick what you have verified in the annual reports. The example below is a made-up company so the page opens with something to read.</p>
+  </div>
+  <div class="score">
+    <div id="qs"></div>
+    <div class="card result">
+      <div class="eyebrow">Example company · made up</div>
+      <div class="total"><b id="tot">0</b><span class="mono">/ 12 checks</span></div>
+      <div class="meter"><i id="meter"></i></div>
+      <div class="verdict" id="verdict"></div>
+      <div class="vsub" id="vsub"></div>
+      <div class="rings" id="rings"></div>
+    </div>
+  </div>
+</section>
+
+<section id="process">
+  <div class="sec-head">
+    <div class="eyebrow">Process</div>
+    <h2>From first idea to a decade of holding</h2>
+    <p>The order matters here. Each step uses a different book, and a company that fails an early step does not reach the next.</p>
+  </div>
+  <ol class="steps" id="steps">
+    <div class="rail"></div>
+    <li data-n="1"><span class="tag">Lynch</span><h3>Notice</h3><p>Start from what you meet in daily life and at work. A brand with queues, a supplier everyone uses, a service that keeps winning customers. Write the two-minute story.</p></li>
+    <li data-n="2"><span class="tag">Coffee Can · Mayer</span><h3>Screen the numbers</h3><p>Ten years of revenue growth at 10% or better, ROCE at 15% or better, low debt, a market value that still leaves room to grow.</p></li>
+    <li data-n="3"><span class="tag">Paul · Mayer</span><h3>Test the people and the moat</h3><p>Promoter track record, pledged shares, related-party dealings, auditor changes. Name the advantage and say what could erase it.</p></li>
+    <li data-n="4"><span class="tag">Lynch · Paul</span><h3>Check the price</h3><p>PEG near or below 1, and a P/E that does not already assume everything goes right. Expect to wait for a fair price more than once.</p></li>
+    <li data-n="5"><span class="tag">Mayer · Coffee Can</span><h3>Hold and review</h3><p>Reread the annual report each year. Sell when the story or the accounts break, not because the price doubled. Keep position sizes small enough to stay calm.</p></li>
+  </ol>
+  <div class="eyebrow" style="margin-top:2.4rem">Indian red flags, checked before step 4</div>
+  <div class="flags">
+    <div class="flag"><b>Promoter pledging</b><span>Shares pledged for loans can be sold in a falling market, and the price spirals.</span></div>
+    <div class="flag"><b>Profit without cash</b><span>Profit that never shows up as operating cash flow, and receivables that keep growing.</span></div>
+    <div class="flag"><b>Related-party deals</b><span>Large dealings with companies the promoters own, and loans to group firms.</span></div>
+    <div class="flag"><b>Auditor exits</b><span>Resignations, qualified opinions or frequent changes without a clear reason.</span></div>
+    <div class="flag"><b>Thin trading</b><span>You may not be able to sell a small-cap position at the price you see.</span></div>
+    <div class="flag"><b>Capital raised often</b><span>Repeated dilution, or money raised for projects that never reach the earnings line.</span></div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="sec-head">
+    <div class="eyebrow">Side by side</div>
+    <h2>Where the four books agree and where they split</h2>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>Book</th><th>Main question</th><th>Size</th><th>Price rule</th><th>Holding</th><th>Sell when</th></tr></thead>
+    <tbody>
+      <tr style="--c:var(--mayer)"><th>100 Baggers</th><td>Can earnings and the multiple both rise for decades?</td><td>Small start, large market</td><td>Margin of safety, but quality first</td><td>15–30 years</td><td>The thesis breaks</td></tr>
+      <tr style="--c:var(--lynch)"><th>One Up on Wall Street</th><td>What type is it, and can I tell its story simply?</td><td>Any, but know the type</td><td>PEG ≤ 1</td><td>Until the story changes</td><td>Story weakens, PEG far above 2, or the type changes</td></tr>
+      <tr style="--c:var(--coffee)"><th>Coffee Can Investing</th><td>Has it earned 15%+ ROCE and grown 10%+ every year for ten years?</td><td>Not the main filter</td><td>Quality outweighs price</td><td>At least 10 years</td><td>Rarely. Low turnover is the method.</td></tr>
+      <tr style="--c:var(--paul)"><th>Multibaggers</th><td>Does it pass SQGLP, especially management quality?</td><td>Small and micro caps</td><td>Reasonable against growth</td><td>Several years, as it compounds</td><td>Governance or growth fails</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<footer>
+  <p><b>Education only.</b> This page is a study aid, not investment advice, and I am not a SEBI-registered adviser. Small and micro caps can lose most of their value.</p>
+  <p>Book summaries are paraphrased. Thresholds such as 15% ROCE or PEG of 1 are rules of thumb you can move above. Check them against the books and against current company filings before you act. All market data in the sieve and the company examples is invented for illustration.</p>
+</footer>
+</main>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const redraws=[];
+function tween(dur,fn){
+  if(RM||!dur){fn(1);return}
+  const t0=performance.now();
+  (function s(n){const k=Math.min(1,(n-t0)/dur);fn(1-Math.pow(1-k,3));if(k<1)requestAnimationFrame(s)})(t0);
+}
+function setup(c){
+  const dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;
+  const W=Math.round(w*dpr),H=Math.round(h*dpr);
+  if(c.width!==W||c.height!==H){c.width=W;c.height=H}
+  const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+  return{ctx,w,h};
+}
+const inr=l=>l>=100?'₹'+(l/100).toLocaleString('en-IN',{maximumFractionDigits:2})+' crore':'₹'+l.toLocaleString('en-IN',{maximumFractionDigits:2})+' lakh';
+const fmtX=m=>(m<10?m.toFixed(1):Math.round(m).toLocaleString('en-IN'))+'x';
+
+/* progress bar */
+addEventListener('scroll',()=>{
+  const d=document.documentElement,max=d.scrollHeight-innerHeight;
+  $('#progress').style.transform='scaleX('+(max>0?Math.min(1,scrollY/max):0)+')';
+},{passive:true});
+
+/* ---------- HERO SIMULATOR ---------- */
+const sim={c:25.9,y:20,log:true,p:1,shown:100,token:0};
+function drawSim(){
+  const cv=$('#simCanvas'),{ctx,w,h}=setup(cv);
+  const L=42,R=16,T=14,B=26,pw=w-L-R,ph=h-T-B,YMAX=30;
+  const val=Math.pow(1+sim.c/100,sim.y);
+  const lmax=Math.max(120,val*1.08);
+  const X=y=>L+y/YMAX*pw;
+  const Y=m=>sim.log?T+(1-Math.log10(Math.max(1,Math.min(m,1000)))/3)*ph:T+(1-Math.min(m,lmax)/lmax)*ph;
+  const ink=css('--ink'),muted=css('--muted'),line=css('--line'),acc=css('--accent');
+  ctx.font='500 10px IBM Plex Mono, monospace';ctx.textBaseline='middle';
+  const ticks=sim.log?[1,10,100,1000]:(()=>{const s=lmax>600?200:lmax>250?100:50,a=[];for(let v=0;v<=lmax;v+=s)a.push(v);return a})();
+  ticks.forEach(t=>{
+    const y=Y(t);ctx.strokeStyle=line;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();
+    ctx.fillStyle=muted;ctx.textAlign='right';ctx.fillText(t===0?'0':t+'x',L-6,y);
+  });
+  ctx.textAlign='center';ctx.textBaseline='top';
+  for(let y=0;y<=YMAX;y+=5){ctx.fillStyle=muted;ctx.fillText(y,X(y),h-B+8)}
+  ctx.fillText('years',w-R-12,h-B+8-0);
+  /* 100x line */
+  ctx.setLineDash([5,4]);ctx.strokeStyle=acc;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(L,Y(100));ctx.lineTo(w-R,Y(100));ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=acc;ctx.textAlign='left';ctx.textBaseline='bottom';ctx.fillText('100x',L+4,Y(100)-3);
+  const series=[{r:7,col:muted,lab:'FD 7%',dash:true},{r:12,col:muted,lab:'Index 12%',dash:false},{r:sim.c,col:acc,main:true}];
+  series.forEach(s=>{
+    ctx.beginPath();ctx.strokeStyle=s.col;ctx.lineWidth=s.main?3.2:1.4;ctx.setLineDash(s.dash?[3,3]:[]);
+    const end=sim.y*sim.p;
+    for(let y=0;y<=end+1e-6;y+=.2){const m=Math.pow(1+s.r/100,y);const px=X(y),py=Y(m);y===0?ctx.moveTo(px,py):ctx.lineTo(px,py)}
+    const m2=Math.pow(1+s.r/100,end);ctx.lineTo(X(end),Y(m2));ctx.stroke();ctx.setLineDash([]);
+    if(!s.main&&sim.p>.98){ctx.fillStyle=muted;ctx.textAlign='right';ctx.textBaseline='bottom';ctx.fillText(s.lab,X(sim.y)-4,Y(m2)-4)}
+    if(s.main){
+      ctx.fillStyle=acc;ctx.beginPath();ctx.arc(X(end),Y(m2),5,0,7);ctx.fill();
+      ctx.fillStyle=ink;ctx.font='600 11px IBM Plex Mono, monospace';ctx.textAlign=X(end)>w-70?'right':'left';ctx.textBaseline='bottom';
+      ctx.fillText(fmtX(m2),X(end)+(X(end)>w-70?-8:8),Y(m2)-6);ctx.font='500 10px IBM Plex Mono, monospace';
+    }
+  });
+}
+redraws.push(drawSim);
+function simReplay(){
+  const id=++sim.token,from=sim.shown,to=Math.pow(1+sim.c/100,sim.y);
+  $('#simSub').textContent='At '+sim.c.toFixed(1)+'% a year for '+sim.y+' years';
+  tween(900,k=>{
+    if(id!==sim.token)return;
+    sim.p=k;const cur=from+(to-from)*k;
+    $('#simValue').textContent=inr(cur);$('#simMult').textContent=fmtX(cur);
+    drawSim();
+  });
+  sim.shown=to;
+}
+function simInputs(){
+  sim.c=+$('#cagr').value;sim.y=+$('#yrs').value;
+  $('#cagrOut').textContent=sim.c.toFixed(1)+'%';$('#yrsOut').textContent=sim.y;
+  $$('#reqChips .chip').forEach(b=>b.setAttribute('aria-pressed',Math.abs(+b.dataset.y-sim.y)<.01&&Math.abs(+b.dataset.c-sim.c)<.06?'true':'false'));
+}
+[10,15,20,25,30].forEach(y=>{
+  const c=(Math.pow(100,1/y)-1)*100,b=document.createElement('button');
+  b.className='chip';b.dataset.y=y;b.dataset.c=c.toFixed(1);b.textContent='100x in '+y+'y = '+c.toFixed(1)+'%';
+  b.onclick=()=>{$('#cagr').value=c.toFixed(1);$('#yrs').value=y;simInputs();simReplay()};
+  $('#reqChips').appendChild(b);
+});
+['cagr','yrs'].forEach(i=>$('#'+i).addEventListener('input',()=>{simInputs();simReplay()}));
+$('#scaleBtn').onclick=e=>{sim.log=!sim.log;e.target.setAttribute('aria-pressed',sim.log);e.target.textContent=sim.log?'Log scale':'Linear scale';drawSim()};
+$('#cagr').value=25.9;simInputs();sim.shown=1;simReplay();
+
+/* ---------- TABS ---------- */
+function selectTab(k){
+  $$('.tab').forEach(t=>t.setAttribute('aria-selected',t.id==='t-'+k));
+  $$('.panel').forEach(p=>p.hidden=p.id!=='p-'+k);
+  if(k==='mayer')mayer();if(k==='lynch')lynch();if(k==='coffee')coffee(true);if(k==='paul')radarGo();
+  try{history.replaceState(null,'','#'+k)}catch(e){}
+}
+$$('.tab').forEach(t=>{
+  t.onclick=()=>selectTab(t.id.slice(2));
+  t.onkeydown=e=>{
+    const a=$$('.tab'),i=a.indexOf(t);let n=null;
+    if(e.key==='ArrowRight')n=a[(i+1)%a.length];if(e.key==='ArrowLeft')n=a[(i+a.length-1)%a.length];
+    if(n){n.focus();n.click();e.preventDefault()}
+  };
+});
+$$('[data-go]').forEach(a=>a.addEventListener('click',()=>selectTab(a.dataset.go)));
+
+/* Mayer lab */
+function mayer(){
+  const g=+$('#mEps').value,y=+$('#mYrs').value,p0=+$('#mPe0').value,p1=+$('#mPe1').value;
+  $('#mEpsO').textContent=g+'%';$('#mYrsO').textContent=y;$('#mPe0O').textContent=p0+'x';$('#mPe1O').textContent=p1+'x';
+  const e=Math.pow(1+g/100,y),pe=p1/p0,pr=e*pe,sc=v=>Math.max(2,Math.min(100,Math.log(v)/Math.log(400)*100));
+  [['#mB1','#mV1',e],['#mB2','#mV2',pe],['#mB3','#mV3',pr]].forEach(([b,v,x])=>{$(b).style.width=sc(x)+'%';$(v).textContent=fmtX(x)});
+  const h=$('#mHit');
+  h.textContent=pr>=100?'Hundred-bagger: '+fmtX(e)+' earnings × '+fmtX(pe)+' multiple = '+fmtX(pr):pr>=10?'Ten-bagger territory: '+fmtX(pr)+'. A 100x needs a longer run or a bigger rerating.':'Only '+fmtX(pr)+'. Earnings growth alone has to do the work.';
+}
+['mEps','mYrs','mPe0','mPe1'].forEach(i=>$('#'+i).addEventListener('input',mayer));
+
+/* Lynch lab */
+(function(){
+  const pt=a=>{const r=a*Math.PI/180;return[120-90*Math.cos(r),120-90*Math.sin(r)]};
+  const arc=(a,b)=>{const p=pt(a),q=pt(b);return`M${p[0]} ${p[1]}A90 90 0 0 1 ${q[0]} ${q[1]}`};
+  $('#gz1').setAttribute('d',arc(1,59));$('#gz2').setAttribute('d',arc(61,119));$('#gz3').setAttribute('d',arc(121,179));
+  ['Slow growers','Stalwarts','Fast growers','Cyclicals','Turnarounds','Asset plays'].forEach(c=>{const s=document.createElement('span');s.textContent=c;$('#lCats').appendChild(s)});
+})();
+function lynch(){
+  const pe=+$('#lPe').value,g=+$('#lG').value,peg=pe/g;
+  $('#lPeO').textContent=pe+'x';$('#lGO').textContent=g+'%';
+  $('#needle').style.transform='rotate('+(Math.min(peg,3)/3*180)+'deg)';
+  const t=peg<=1?'PEG '+peg.toFixed(2)+'. Cheap for this growth rate.':peg<=2?'PEG '+peg.toFixed(2)+'. Fair to full, so check the story twice.':'PEG '+peg.toFixed(2)+'. The price assumes more growth than is on the table.';
+  $('#lHit').textContent=t;
+  const idx=g<5?0:g<15?1:2;
+  $$('#lCats span').forEach((s,i)=>s.classList.toggle('on',i===idx));
+}
+['lPe','lG'].forEach(i=>$('#'+i).addEventListener('input',lynch));
+
+/* Coffee can lab */
+const CC={
+  A:{rev:[14,16,12,15,18,13,14,17,15,16],roce:[28,30,27,29,31,30,28,29,30,32]},
+  B:{rev:[35,-5,22,8,-12,30,4,18,-8,25],roce:[22,9,19,12,6,21,10,17,7,20]},
+  C:{rev:[20,18,16,14,12,9,7,5,4,3],roce:[24,21,19,17,15,13,11,10,9,8]}
+};
+let ccKey='A';
+$('#cYrs').innerHTML=Array.from({length:10},(_,i)=>'<span>Y'+(i+1)+'</span>').join('');
+function coffee(fresh){
+  const d=CC[ccKey],MAXV=40;
+  $$('#cSel .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===ccKey));
+  const build=(el,arr,thr)=>{
+    el.innerHTML='';
+    arr.forEach((v,i)=>{const c=document.createElement('div');c.className='col'+(v<thr?' fail':'');c.style.setProperty('--i',i);c.title='Year '+(i+1)+': '+v+'%';el.appendChild(c)});
+    const t=document.createElement('div');t.className='thr';t.style.bottom=(Math.max(0,thr)/MAXV*100)+'%';t.innerHTML='<em>'+thr+'%</em>';el.appendChild(t);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>el.querySelectorAll('.col').forEach((c,i)=>{c.style.height=Math.max(0,arr[i])/MAXV*100+'%'})));
+  };
+  build($('#cRev'),d.rev,10);build($('#cRoce'),d.roce,15);
+  const rp=d.rev.filter(v=>v>=10).length,qp=d.roce.filter(v=>v>=15).length,ok=rp===10&&qp===10;
+  const h=$('#cHit');
+  h.textContent=ok?'Qualifies: '+rp+'/10 years of growth and '+qp+'/10 years of ROCE clear the bar. It goes into the can.':'Fails: growth passes '+rp+'/10 years and ROCE '+qp+'/10. '+(ccKey==='B'?'Strong years do not make up for lumpy ones.':'The record is fading.');
+  h.style.background='color-mix(in srgb,var('+(ok?'--good':'--bad')+') 16%,transparent)';
+}
+$$('#cSel .chip').forEach(b=>b.onclick=()=>{ccKey=b.dataset.k;coffee()});
+
+/* Paul radar */
+const SQ=[['S','Small size','Room to grow several-fold',8],['Q','Quality','Business, management, governance',7],['G','Growth','Earnings runway and its reason',7],['L','Longevity','Still needed in twenty years',6],['P','Price','Fair for the growth ahead',5]];
+let rv=SQ.map(x=>x[3]),rShow=SQ.map(()=>0);
+(function(){
+  $('#pSliders').innerHTML=SQ.map((s,i)=>`<div class="sq"><label for="sq${i}"><span><b>${s[0]}</b> ${s[1]} · ${s[2]}</span><b id="sqO${i}">${s[3]}</b></label><input id="sq${i}" type="range" min="0" max="10" step="1" value="${s[3]}"></div>`).join('');
+  SQ.forEach((s,i)=>$('#sq'+i).addEventListener('input',e=>{rv[i]=+e.target.value;$('#sqO'+i).textContent=rv[i];radarGo(true)}));
+})();
+function radarDraw(vals){
+  const cx=170,cy=150,R=100,ang=i=>(-90+72*i)*Math.PI/180,P=(i,r)=>[cx+r*Math.cos(ang(i)),cy+r*Math.sin(ang(i))];
+  let s='';
+  [2.5,5,7.5,10].forEach(l=>{s+=`<polygon points="${SQ.map((_,i)=>P(i,R*l/10).join(',')).join(' ')}" fill="none" stroke="var(--line)" stroke-width="1"/>`});
+  SQ.forEach((q,i)=>{const p=P(i,R),t=P(i,R+22);s+=`<line x1="${cx}" y1="${cy}" x2="${p[0]}" y2="${p[1]}" stroke="var(--line)"/><text x="${t[0]}" y="${t[1]}" text-anchor="middle" dominant-baseline="central" font-family="Bricolage Grotesque,sans-serif" font-weight="800" font-size="18" fill="var(--paul)">${q[0]}</text>`});
+  s+=`<polygon points="${vals.map((v,i)=>P(i,R*v/10).join(',')).join(' ')}" fill="var(--paul)" fill-opacity=".22" stroke="var(--paul)" stroke-width="2.5" stroke-linejoin="round"/>`;
+  vals.forEach((v,i)=>{const p=P(i,R*v/10);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="4.5" fill="var(--paul)"/>`});
+  $('#radar').innerHTML=s;
+}
+let rId=0;
+function radarGo(quick){
+  const id=++rId,from=rShow.slice(),to=rv.slice();
+  tween(quick?250:900,k=>{if(id!==rId)return;rShow=from.map((f,i)=>f+(to[i]-f)*k);radarDraw(rShow)});
+  const avg=to.reduce((a,b)=>a+b,0)/5,low=Math.min(...to),worst=SQ[to.indexOf(low)];
+  const h=$('#pHit');
+  h.textContent=low<=3?worst[1]+' scores '+low+'. Paul-style checklists treat a weak letter as a reason to pass, however strong the rest.':avg>=7?'Average '+avg.toFixed(1)+'/10 with no weak letter. Worth deep research.':'Average '+avg.toFixed(1)+'/10. Keep it on the watchlist and look for what could lift the lowest score.';
+}
+
+/* ---------- SIEVE ---------- */
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rnd=rng(2026),gauss=()=>{let u=0;for(let i=0;i<6;i++)u+=rnd();return(u-3)*Math.SQRT2};
+const N=300,D=[];
+for(let i=0;i<N;i++){
+  const q=gauss();
+  D.push({mcap:Math.exp(7.6+1.7*gauss()),roce:Math.max(2,14+7*q+4*gauss()),growth:Math.max(-2,11+4*q+5*gauss()),peg:Math.exp(.3+.2*q+.45*gauss()),de:Math.max(0,.6-.25*q+.5*gauss()),prom:Math.min(75,Math.max(10,45+12*gauss()))});
+}
+const FL=[
+  {id:'size',name:'Small enough to grow',src:'Mayer · Paul',min:500,max:30000,step:500,val:3000,fmt:v=>'Market cap < ₹'+v.toLocaleString('en-IN')+' cr',test:(d,v)=>d.mcap<v},
+  {id:'roce',name:'Quality of returns',src:'Coffee Can · Mayer',min:10,max:30,step:1,val:15,fmt:v=>'10-yr ROCE ≥ '+v+'%',test:(d,v)=>d.roce>=v},
+  {id:'growth',name:'Steady growth',src:'Coffee Can · Lynch',min:5,max:25,step:1,val:10,fmt:v=>'Revenue growth ≥ '+v+'%',test:(d,v)=>d.growth>=v},
+  {id:'peg',name:'Price against growth',src:'Lynch · Paul',min:.5,max:2,step:.1,val:1,fmt:v=>'PEG ≤ '+(+v).toFixed(1),test:(d,v)=>d.peg<=v},
+  {id:'de',name:'Low debt',src:'Lynch · Mayer',min:0,max:1.5,step:.1,val:.5,fmt:v=>'Debt/equity ≤ '+(+v).toFixed(1),test:(d,v)=>d.de<=v},
+  {id:'prom',name:'Owner-operators',src:'Mayer · Paul',min:20,max:75,step:5,val:40,fmt:v=>'Promoter holding ≥ '+v+'%',test:(d,v)=>d.prom>=v}
+];
+const st={};FL.forEach(f=>st[f.id]={on:true,v:f.val});
+const PRE={all:['size','roce','growth','peg','de','prom'],mayer:['size','roce','de','prom'],lynch:['growth','peg','de'],coffee:['roce','growth'],paul:['size','roce','growth','peg','prom']};
+const PN={all:'All four',mayer:'Mayer set',lynch:'Lynch set',coffee:'Coffee Can set',paul:'Paul set'};
+Object.keys(PRE).forEach(k=>{const b=document.createElement('button');b.className='chip';b.textContent=PN[k];b.dataset.k=k;b.onclick=()=>{FL.forEach(f=>{st[f.id].on=PRE[k].includes(f.id)});syncUI();sieveUpdate()};$('#presets').appendChild(b)});
+$('#filters').innerHTML=FL.map(f=>`<div class="frow" id="fr-${f.id}"><input type="checkbox" id="c-${f.id}" checked aria-label="${f.name}"><div class="t"><b>${f.name}</b><small>${f.src}</small></div><div><span class="rd" id="rd-${f.id}"></span><input type="range" id="s-${f.id}" min="${f.min}" max="${f.max}" step="${f.step}" value="${f.val}" aria-label="${f.name} threshold"></div></div>`).join('');
+FL.forEach(f=>{
+  $('#c-'+f.id).onchange=e=>{st[f.id].on=e.target.checked;syncUI();sieveUpdate()};
+  $('#s-'+f.id).oninput=e=>{st[f.id].v=+e.target.value;syncUI();sieveUpdate()};
+});
+$('#funnel').innerHTML=`<div class="fr"><span>Universe</span><div class="tr"><div class="fl" id="fl-u"></div></div><span class="n">${N}</span></div>`+FL.map(f=>`<div class="fr" id="fnr-${f.id}"><span>${f.name}</span><div class="tr"><div class="fl" id="fl-${f.id}"></div></div><span class="n" id="fn-${f.id}"></span></div>`).join('');
+function syncUI(){
+  FL.forEach(f=>{
+    const s=st[f.id];$('#c-'+f.id).checked=s.on;$('#fr-'+f.id).classList.toggle('off',!s.on);
+    $('#rd-'+f.id).textContent=f.fmt(s.v);$('#fnr-'+f.id).classList.toggle('off',!s.on);
+  });
+}
+const dots=D.map(()=>({r:0,a:0,tr:0,ta:0,pass:true}));
+let loop=0,tipIdx=-1;
+function geom(){
+  const cv=$('#dots'),w=cv.parentElement.clientWidth-2*17.6;
+  const cols=w<520?20:30,rows=Math.ceil(N/cols),cell=(cv.clientWidth||w)/cols;
+  cv.style.height=Math.round(rows*cell)+'px';return{cols,rows,cell};
+}
+function sieveDraw(){
+  const cv=$('#dots'),g=geom(),{ctx}=setup(cv);
+  const acc=css('--accent'),mut=css('--muted');
+  let moving=false;
+  dots.forEach((d,i)=>{
+    d.r+=(d.tr-d.r)*.16;d.a+=(d.ta-d.a)*.16;
+    if(Math.abs(d.tr-d.r)>.02||Math.abs(d.ta-d.a)>.005)moving=true;
+    const x=(i%g.cols+.5)*g.cell,y=(Math.floor(i/g.cols)+.5)*g.cell,rr=d.r*g.cell/2;
+    if(d.pass){ctx.globalAlpha=d.a*.22;ctx.fillStyle=acc;ctx.beginPath();ctx.arc(x,y,rr*1.7,0,7);ctx.fill()}
+    ctx.globalAlpha=d.a;ctx.fillStyle=d.pass?acc:mut;ctx.beginPath();ctx.arc(x,y,rr,0,7);ctx.fill();
+  });
+  ctx.globalAlpha=1;
+  if(moving)loop=requestAnimationFrame(sieveDraw);else loop=0;
+}
+function kick(){if(!loop)loop=requestAnimationFrame(sieveDraw)}
+redraws.push(()=>{if(!loop)sieveDraw()});
+function sieveUpdate(){
+  let cur=D.map(()=>true),count=N;
+  FL.forEach(f=>{
+    const s=st[f.id];
+    if(s.on)cur=cur.map((ok,i)=>ok&&f.test(D[i],s.v));
+    count=cur.filter(Boolean).length;
+    $('#fl-'+f.id).style.width=(count/N*100)+'%';$('#fn-'+f.id).textContent=s.on?count:'off';
+  });
+  dots.forEach((d,i)=>{d.pass=cur[i];d.tr=cur[i]?.9:.34;d.ta=cur[i]?1:.3});
+  $('#surv').textContent=count;
+  $('#survTxt').textContent=count===0?'of 300 pass. Loosen one filter to see what each one costs.':count===1?'of 300 simulated companies passes':'of 300 simulated companies pass';
+  $$('#presets .chip').forEach(b=>{const on=FL.filter(f=>st[f.id].on).map(f=>f.id).sort().join();b.setAttribute('aria-pressed',on===PRE[b.dataset.k].slice().sort().join())});
+  kick();
+}
+function replay(){
+  FL.forEach(f=>st[f.id].on=false);syncUI();
+  dots.forEach(d=>{d.r=.9;d.a=1});sieveUpdate();
+  if(RM){FL.forEach(f=>st[f.id].on=true);syncUI();sieveUpdate();return}
+  FL.forEach((f,i)=>setTimeout(()=>{st[f.id].on=true;syncUI();sieveUpdate()},700*(i+1)));
+}
+$('#replay').onclick=replay;
+syncUI();dots.forEach(d=>{d.r=0;d.a=0});sieveUpdate();
+const cvD=$('#dots'),tip=$('#tip');
+cvD.addEventListener('mousemove',e=>{
+  const g=geom(),r=cvD.getBoundingClientRect(),cx=Math.floor((e.clientX-r.left)/g.cell),cy=Math.floor((e.clientY-r.top)/g.cell),i=cy*g.cols+cx;
+  if(cx<0||cx>=g.cols||i<0||i>=N){tip.style.opacity=0;return}
+  const d=D[i];
+  tip.innerHTML=`Company #${i+1} · ${dots[i].pass?'passes':'rejected'}<br>Mcap ₹${Math.round(d.mcap).toLocaleString('en-IN')} cr · ROCE ${d.roce.toFixed(0)}%<br>Growth ${d.growth.toFixed(0)}% · PEG ${d.peg.toFixed(1)}<br>D/E ${d.de.toFixed(1)} · Promoter ${d.prom.toFixed(0)}%`;
+  const pr=cvD.parentElement.getBoundingClientRect(),tx=e.clientX-pr.left+14;
+  tip.style.left=Math.min(tx,pr.width-190)+'px';tip.style.top=(e.clientY-pr.top+14)+'px';tip.style.opacity=1;
+});
+cvD.addEventListener('mouseleave',()=>tip.style.opacity=0);
+
+/* ---------- SCORECARD ---------- */
+const QG=[
+  {k:'Mayer · 100 Baggers',c:'--mayer',q:['The company is small against the market it can still serve.','Founders or promoters run it and hold a meaningful stake.','ROCE has stayed above 15% with low debt, and I can name the moat.']},
+  {k:'Lynch · One Up',c:'--lynch',q:['I can tell the growth story in two minutes.','PEG is at or below 1 for the growth I expect.','Debt is low and I know which of the six types it is.']},
+  {k:'Mukherjea · Coffee Can',c:'--coffee',q:['Revenue grew at least 10% in each of the last ten years.','ROCE was at least 15% in each of the last ten years.','Operating cash flow tracks profit, with no sign of aggressive accounting.']},
+  {k:'Paul · Multibaggers',c:'--paul',q:['Management has a clean record: no pledging, tidy related-party dealings, stable auditors.','The business will still be needed in twenty years.','The price is reasonable for the growth ahead.']}
+];
+const pre=[1,0,1,1,1,0,0,1,1,1,1,0].map(Boolean);
+$('#qs').innerHTML=QG.map((g,gi)=>`<div class="qgroup" style="--c:var(${g.c})"><h3>${g.k}</h3>${g.q.map((t,qi)=>`<label class="q"><input type="checkbox" data-g="${gi}" ${pre[gi*3+qi]?'checked':''}><span>${t}</span></label>`).join('')}</div>`).join('');
+const CIR=2*Math.PI*24;
+$('#rings').innerHTML=QG.map((g,i)=>`<div class="ring" style="--c:var(${g.c})"><svg viewBox="0 0 64 64"><circle class="bgc" cx="32" cy="32" r="24"/><circle class="fgc" id="rg${i}" cx="32" cy="32" r="24" stroke-dasharray="${CIR}" stroke-dashoffset="${CIR}"/><text x="32" y="33" id="rt${i}">0</text></svg>${g.k.split(' · ')[0]}</div>`).join('');
+function score(){
+  const per=[0,0,0,0];$$('#qs input').forEach(i=>{if(i.checked)per[+i.dataset.g]++});
+  const t=per.reduce((a,b)=>a+b,0);
+  per.forEach((n,i)=>{$('#rg'+i).style.strokeDashoffset=CIR*(1-n/3);$('#rt'+i).textContent=n});
+  $('#tot').textContent=t;$('#meter').style.width=t/12*100+'%';
+  const v=t>=10?['Strong candidate','Rare. Confirm the red flags above, then decide the position size.','--good']:t>=7?['Deep research','Passes most tests. Find out why the missing checks fail.','--accent']:t>=4?['Watchlist','Interesting but incomplete. Come back after the next two annual reports.','--warn']:['Not yet','Too many open questions. Move on to the next idea.','--bad'];
+  $('#verdict').textContent=v[0];$('#vsub').textContent=v[1];$('#meter i').style.background='var('+v[2]+')';
+}
+$$('#qs input').forEach(i=>i.addEventListener('change',score));
+
+/* ---------- reveal & init ---------- */
+const io=new IntersectionObserver(es=>es.forEach(e=>{
+  if(!e.isIntersecting)return;
+  if(e.target.id==='steps'){e.target.classList.add('play')}
+  if(e.target.id==='sieve'&&!RM){replay()}
+  if(e.target.id==='scorecard'){score()}
+  io.unobserve(e.target);
+}),{threshold:.25});
+io.observe($('#steps'));io.observe($('#sieve'));io.observe($('#scorecard'));
+score();
+const startTab=['mayer','lynch','coffee','paul'].includes(location.hash.slice(1))?location.hash.slice(1):'mayer';
+selectTab(startTab);
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>redraws.forEach(f=>f()),80)});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>setTimeout(()=>redraws.forEach(f=>f()),50));
+new MutationObserver(()=>setTimeout(()=>redraws.forEach(f=>f()),50)).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+})();
+</script>

@@ -1,0 +1,946 @@
+<title>Qwen API Journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: setup bar on top, a 4-stop route (app, internet, gateway, model) with a travelling packet,
+   then step explanation beside a live wire-format log, then an "inside the model" strip. */
+:root{
+  --bg:#EDF1F4; --surface:#FFFFFF; --ink:#14212B; --muted:#58697A; --line:#D0DAE2;
+  --req:#6B46D8; --res:#D96A0B; --ok:#12806A;
+  --code-bg:#0F1A24; --code-fg:#D3E0EB; --code-mute:#7F93A5; --code-key:#7FB0FF; --code-str:#8FD6B4; --code-ok:#6FE0B8;
+  --display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --body:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  --hl:var(--req);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0B1218; --surface:#131D26; --ink:#E5EDF3; --muted:#8CA0AF; --line:#24323E;
+  --req:#A992FF; --res:#F5A04F; --ok:#4AD1AE;
+  --code-bg:#080E14; --code-fg:#CCDCE8; --code-mute:#6F8496; --code-key:#8DB8FF; --code-str:#8FD6B4; --code-ok:#6FE0B8;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B1218; --surface:#131D26; --ink:#E5EDF3; --muted:#8CA0AF; --line:#24323E;
+  --req:#A992FF; --res:#F5A04F; --ok:#4AD1AE;
+  --code-bg:#080E14; --code-fg:#CCDCE8; --code-mute:#6F8496; --code-key:#8DB8FF; --code-str:#8FD6B4; --code-ok:#6FE0B8;
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);margin:0;padding-inline:clamp(16px,4vw,40px);padding-block:32px 64px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font:700 clamp(28px,5vw,46px)/1.05 var(--display);letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2,h3{margin:0;text-wrap:balance}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--req);margin:0 0 10px}
+.eyebrow{overflow-wrap:anywhere}
+.lede{max-width:64ch;color:var(--muted);margin:12px 0 0;font-size:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+label,.lbl{display:block;font:500 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+textarea,select{width:100%;font:14px/1.4 var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+textarea{resize:vertical;min-height:64px}
+:focus-visible{outline:2px solid var(--req);outline-offset:2px}
+input[type=range]{width:100%;accent-color:var(--req)}
+.rangeRow{display:flex;align-items:center;gap:10px}
+.rangeRow output{font:500 13px var(--mono);min-width:2.5ch;text-align:right}
+.switch{display:flex;align-items:center;gap:8px;font:500 14px var(--body);text-transform:none;letter-spacing:0;color:var(--ink);margin:0;min-height:38px}
+.switch input{width:18px;height:18px;accent-color:var(--req)}
+
+.setup{display:grid;grid-template-columns:minmax(0,2.2fr) repeat(3,minmax(0,1fr));gap:16px;align-items:start}
+@media (max-width:860px){.setup{grid-template-columns:1fr 1fr}.setup .prompt{grid-column:1/-1}}
+@media (max-width:480px){.setup{grid-template-columns:1fr}}
+
+.transport{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.btns{display:flex;gap:8px}
+button{font:600 14px var(--body);border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;cursor:pointer;min-height:38px}
+button:hover:not(:disabled){border-color:var(--ink)}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--req);border-color:var(--req);color:#fff;min-width:132px}
+:root[data-theme="dark"] button.primary{color:#0B1218}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) button.primary{color:#0B1218}}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pills button{padding:0;width:32px;min-height:32px;font:500 13px var(--mono);border-radius:50%}
+.pills button.done{border-color:var(--req);color:var(--req)}
+.pills button.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.legend{display:flex;gap:14px;font:500 12px var(--mono);color:var(--muted);margin-left:auto}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.speed{width:auto;min-width:84px;padding:6px 8px}
+
+.track{position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:40px;margin-top:6px}
+.track[data-phase=req]{--hl:var(--req)}
+.track[data-phase=res]{--hl:var(--res)}
+@media (max-width:760px){.track{grid-template-columns:1fr;gap:26px}}
+.wire{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:0}
+.wire polyline{fill:none;stroke:var(--line);stroke-width:2;stroke-dasharray:5 6}
+.node{position:relative;z-index:1;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;transition:border-color .3s,box-shadow .3s;min-width:0}
+.node.on{border-color:var(--hl);box-shadow:0 0 0 3px color-mix(in srgb,var(--hl) 22%,transparent)}
+.nhead{display:flex;align-items:center;gap:10px}
+.port{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--line);background:var(--surface);transition:background .3s,border-color .3s}
+.node.on .port{background:var(--hl);border-color:var(--hl)}
+.node h3{font:600 16px/1.2 var(--display)}
+.node p{margin:0;font-size:13px;color:var(--muted)}
+.appOut{font:13px/1.45 var(--body);min-height:3.2em;background:var(--bg);border:1px dashed var(--line);border-radius:6px;padding:8px 10px;overflow-wrap:anywhere}
+.appOut .tag{display:block;font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.muted{color:var(--muted)}
+.caret{display:inline-block;width:7px;height:1em;background:var(--res);vertical-align:-2px;margin-left:1px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.packet,.dot{position:absolute;left:0;top:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;z-index:3;pointer-events:none}
+.packet{transition:transform var(--dur,900ms) cubic-bezier(.5,0,.2,1),background .3s;box-shadow:0 0 0 5px color-mix(in srgb,currentColor 25%,transparent)}
+.packet.req{background:var(--req);color:var(--req)}
+.packet.res{background:var(--res);color:var(--res)}
+.dot{width:10px;height:10px;margin:-5px 0 0 -5px;background:var(--res)}
+
+.detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:20px;align-items:stretch}
+@media (max-width:860px){.detail{grid-template-columns:1fr}}
+.explain{display:flex;flex-direction:column;gap:10px}
+.explain .stepno{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.explain h2{font:700 clamp(22px,3vw,28px)/1.15 var(--display);letter-spacing:-.01em}
+.explain p{margin:0;max-width:62ch}
+.code{background:var(--code-bg);color:var(--code-fg);font:12.5px/1.55 var(--mono);border-radius:10px;padding:14px 16px;height:340px;overflow:auto;min-width:0}
+.code .ln{white-space:pre-wrap;overflow-wrap:anywhere;min-height:1.55em}
+.code .c{color:var(--code-mute)}
+.code .k{color:var(--code-key)}
+.code .s{color:var(--code-str)}
+.code .ok{color:var(--code-ok)}
+.code .hl{color:#FFB877}
+.codeHead{display:flex;justify-content:space-between;font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+
+.model h2{font:700 20px/1.2 var(--display);margin-bottom:4px}
+.model .sub{margin:0 0 14px;color:var(--muted);font-size:14px;max-width:70ch}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+.col{border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;transition:border-color .3s,box-shadow .3s;min-width:0}
+.col.live{border-color:var(--req);box-shadow:0 0 0 3px color-mix(in srgb,var(--req) 20%,transparent)}
+.col.live.dec{border-color:var(--res);box-shadow:0 0 0 3px color-mix(in srgb,var(--res) 20%,transparent)}
+.col h3{font:600 15px var(--display)}
+.col .cap{font-size:13px;color:var(--muted);margin:0}
+.col .n{font:500 12px var(--mono);color:var(--muted);margin-right:6px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;min-height:28px;align-content:flex-start}
+.chip{font:12px var(--mono);padding:2px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);animation:pop .25s ease-out}
+.chip.out{border-color:color-mix(in srgb,var(--res) 55%,var(--line))}
+.chip.stop{border-style:dashed;color:var(--muted)}
+.chip.ph{border-style:dashed;color:var(--muted);animation:none}
+@keyframes pop{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
+.bar{height:10px;background:var(--bg);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--req)}
+.count{font:500 12px var(--mono);color:var(--muted)}
+.note{font-size:13px;color:var(--muted);max-width:90ch;margin:0}
+
+/* ambient motion in the journey view */
+.wire polyline{animation:march 1.4s linear infinite}
+@keyframes march{to{stroke-dashoffset:-11}}
+.node.on .port{animation:ring 1.4s ease-out infinite}
+@keyframes ring{from{box-shadow:0 0 0 0 color-mix(in srgb,var(--hl) 55%,transparent)}to{box-shadow:0 0 0 11px transparent}}
+
+/* view tabs */
+.tabs{display:flex;gap:6px;margin:14px 0 4px;border-bottom:1px solid var(--line)}
+.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:8px 12px;color:var(--muted);min-height:40px}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--req)}
+
+/* component diagram */
+.diagWrap{--hl:var(--req);margin-top:10px}
+.diagWrap[data-phase=res]{--hl:var(--res)}
+.diagScroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+#diag{display:block;min-width:780px;width:100%;height:auto}
+#diag .grp rect{fill:none;stroke:var(--line);stroke-width:1.5;stroke-dasharray:5 5;transition:stroke .3s,fill .3s}
+#diag .grp.on rect{stroke:var(--hl);fill:color-mix(in srgb,var(--hl) 6%,transparent)}
+#diag .gl{fill:var(--muted);font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+#diag .comp{cursor:pointer;outline:none}
+#diag .comp rect.bx{fill:var(--surface);stroke:var(--line);stroke-width:1.5;transition:stroke .3s,fill .3s}
+#diag .comp:hover rect.bx,#diag .comp:focus-visible rect.bx{stroke:var(--ink)}
+#diag .comp.on rect.bx{stroke:var(--hl);stroke-width:2.5;fill:color-mix(in srgb,var(--hl) 12%,var(--surface))}
+#diag .comp.on{animation:glow 1.2s ease-in-out infinite}
+@keyframes glow{50%{filter:drop-shadow(0 0 6px color-mix(in srgb,var(--hl) 60%,transparent))}}
+#diag .t{fill:var(--ink);font:600 13px var(--display)}
+#diag .s{fill:var(--muted);font:11px var(--mono)}
+#diag .st{fill:var(--hl)}
+#diag .cn{fill:none;stroke:var(--line);stroke-width:2;stroke-dasharray:5 6;animation:march 1.4s linear infinite}
+#diag .cn.res{stroke:color-mix(in srgb,var(--res) 50%,var(--line))}
+#diag .cn.use{stroke:color-mix(in srgb,var(--ok) 50%,var(--line))}
+#diag .lane{fill:var(--muted);font:500 11px var(--mono)}
+#diag .chk{fill:var(--ok);font:700 15px var(--body);opacity:0;transition:opacity .25s}
+#diag .chk.show{opacity:1}
+#diag .cell{fill:var(--bg);stroke:var(--line);stroke-width:1;transition:fill .2s}
+#diag .cell.lit{fill:var(--req);stroke:var(--req)}
+#diag .cell.lit.o{fill:var(--res);stroke:var(--res)}
+#diag .slot{fill:var(--bg);stroke:var(--line);transition:fill .25s}
+#diag .slot.busy{fill:var(--muted);stroke:var(--muted);opacity:.55}
+#diag .slot.me{fill:var(--req);stroke:var(--req)}
+#diag .pbar{fill:var(--req);transform-box:fill-box;transform-origin:0 50%;transform:scaleX(0)}
+#diag .pbarBg{fill:var(--bg);stroke:var(--line)}
+#diag .pk{filter:drop-shadow(0 0 4px currentColor)}
+#diag .pk.req{fill:var(--req);color:var(--req)}
+#diag .pk.res{fill:var(--res);color:var(--res)}
+#diag .pk.use{fill:var(--ok);color:var(--ok)}
+.compInfo{margin-top:10px;display:flex;gap:10px 16px;align-items:baseline;flex-wrap:wrap;font-size:14px;min-height:3em}
+.compInfo b{font:600 15px var(--display)}
+.compInfo span{color:var(--muted);max-width:90ch}
+@media (prefers-reduced-motion:reduce){.packet{transition:none}.chip{animation:none}.caret{animation:none}.wire polyline,#diag .cn,#diag .comp.on,.node.on .port{animation:none}}
+</style>
+
+<main class="wrap">
+  <header>
+    <p class="eyebrow">POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions</p>
+    <h1>What happens when you call the Qwen API</h1>
+    <p class="lede">Follow one request from your code to the model and back. Change the prompt, the token limit or streaming, then press Send request and watch what changes.</p>
+  </header>
+
+  <section class="panel setup" aria-label="Request settings">
+    <div class="prompt">
+      <label for="prompt">Your prompt</label>
+      <textarea id="prompt" rows="2">Explain what an API is in one sentence.</textarea>
+    </div>
+    <div>
+      <label for="model">Model</label>
+      <select id="model">
+        <option value="qwen-plus">qwen-plus</option>
+        <option value="qwen-max">qwen-max</option>
+        <option value="qwen-turbo">qwen-turbo</option>
+      </select>
+    </div>
+    <div>
+      <label for="max">max_tokens</label>
+      <div class="rangeRow"><input id="max" type="range" min="4" max="40" value="40"><output id="maxOut" for="max">40</output></div>
+    </div>
+    <div>
+      <span class="lbl">stream</span>
+      <label class="switch" for="stream"><input id="stream" type="checkbox" checked> Send tokens as they are made</label>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Request journey">
+    <div class="transport">
+      <div class="btns">
+        <button id="back" aria-label="Previous step">Back</button>
+        <button id="play" class="primary">Send request</button>
+        <button id="next" aria-label="Next step">Next</button>
+      </div>
+      <div class="pills" id="pills" role="group" aria-label="Jump to step"></div>
+      <select id="speed" class="speed" aria-label="Animation speed">
+        <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option>
+      </select>
+      <div class="legend"><span><i style="background:var(--req)"></i>request</span><span><i style="background:var(--res)"></i>response</span></div>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="View">
+      <button id="tabDiag" role="tab" aria-selected="true" aria-controls="viewDiagram">Component diagram</button>
+      <button id="tabJourney" role="tab" aria-selected="false" aria-controls="viewJourney">Journey view</button>
+    </div>
+
+    <div id="viewJourney" hidden>
+    <div class="track" id="track" data-phase="req">
+      <svg class="wire" aria-hidden="true"><polyline id="wirePoly" points=""></polyline></svg>
+
+      <div class="node" data-i="0">
+        <div class="nhead"><span class="port"></span><div><h3>Your app</h3><p>SDK, curl or any HTTP client</p></div></div>
+        <div class="appOut" id="appOut"></div>
+      </div>
+      <div class="node" data-i="1">
+        <div class="nhead"><span class="port"></span><div><h3>The internet</h3><p>DNS, TCP and TLS encryption</p></div></div>
+      </div>
+      <div class="node" data-i="2">
+        <div class="nhead"><span class="port"></span><div><h3>API gateway</h3><p>Auth, validation, rate limits</p></div></div>
+      </div>
+      <div class="node" data-i="3">
+        <div class="nhead"><span class="port"></span><div><h3>Qwen model servers</h3><p>Tokenize, prefill, decode</p></div></div>
+      </div>
+
+      <div class="packet req" id="packet"></div>
+    </div>
+    </div>
+
+    <div id="viewDiagram">
+      <div class="diagWrap" data-phase="req">
+        <div class="diagScroll">
+<svg id="diag" viewBox="0 0 1000 520" role="img" aria-label="Component diagram of a Qwen API call">
+  <!-- connectors -->
+  <path class="cn" d="M140,240 H190"/>
+  <path class="cn" d="M80,190 V65 H190"/>
+  <path class="cn" d="M310,240 H335 V127 H376"/>
+  <path class="cn" d="M465,154 V172"/>
+  <path class="cn" d="M465,226 V244"/>
+  <path class="cn" d="M554,271 H590 V230 H610"/>
+  <path class="cn" d="M710,230 H725 V94 H756"/>
+  <path class="cn" d="M865,122 V142"/>
+  <path class="cn" d="M865,198 V218"/>
+  <path class="cn" d="M865,274 V294"/>
+  <path class="cn" d="M865,350 V370"/>
+  <path class="cn use" d="M756,398 H620 V430 H550"/>
+  <path class="cn res" d="M865,426 V490 H250 V280"/>
+  <text class="lane" x="560" y="482">response lane, same encrypted connection</text>
+  <text class="lane" x="145" y="231">request</text>
+
+  <!-- groups -->
+  <g class="grp" id="g-gw"><rect x="360" y="60" width="210" height="250" rx="10"/><text class="gl" x="376" y="82">API gateway</text></g>
+  <g class="grp" id="g-inf"><rect x="740" y="30" width="250" height="440" rx="10"/><text class="gl" x="756" y="52">Model inference cluster</text></g>
+
+  <!-- components -->
+  <g class="comp" data-c="client" tabindex="0" role="button" aria-label="Your app">
+    <rect class="bx" x="20" y="190" width="120" height="100" rx="8"/>
+    <text class="t" x="80" y="218" text-anchor="middle">Your app</text>
+    <text class="s" x="80" y="236" text-anchor="middle">SDK · HTTP</text>
+    <text class="s st" id="cStatus" x="80" y="276" text-anchor="middle">ready to send</text>
+  </g>
+  <g class="comp" data-c="dns" tabindex="0" role="button" aria-label="DNS">
+    <rect class="bx" x="190" y="40" width="130" height="50" rx="8"/>
+    <text class="t" x="255" y="62" text-anchor="middle">DNS</text>
+    <text class="s st" id="dTag" x="255" y="79" text-anchor="middle">dashscope-intl…</text>
+  </g>
+  <g class="comp" data-c="edge" tabindex="0" role="button" aria-label="Edge proxy">
+    <rect class="bx" x="190" y="200" width="120" height="80" rx="8"/>
+    <text class="t" x="250" y="224" text-anchor="middle">Edge proxy</text>
+    <text class="s" x="250" y="242" text-anchor="middle">TLS · balancing</text>
+    <text class="s st" id="eTag" x="250" y="264" text-anchor="middle">not connected</text>
+  </g>
+
+  <g class="comp" data-c="auth" tabindex="0" role="button" aria-label="Authentication">
+    <rect class="bx" x="376" y="100" width="178" height="54" rx="8"/>
+    <text class="t" x="390" y="123">Authentication</text>
+    <text class="s" x="390" y="141">Bearer key → workspace</text>
+    <text class="chk" id="chk0" x="534" y="132">✓</text>
+  </g>
+  <g class="comp" data-c="val" tabindex="0" role="button" aria-label="Validation">
+    <rect class="bx" x="376" y="172" width="178" height="54" rx="8"/>
+    <text class="t" x="390" y="195">Validation</text>
+    <text class="s" x="390" y="213">schema + model check</text>
+    <text class="chk" id="chk1" x="534" y="204">✓</text>
+  </g>
+  <g class="comp" data-c="rate" tabindex="0" role="button" aria-label="Rate limits">
+    <rect class="bx" x="376" y="244" width="178" height="54" rx="8"/>
+    <text class="t" x="390" y="267">Rate limits</text>
+    <text class="s" x="390" y="285">RPM · TPM</text>
+    <text class="chk" id="chk2" x="534" y="276">✓</text>
+  </g>
+
+  <g class="comp" data-c="queue" tabindex="0" role="button" aria-label="Scheduler">
+    <rect class="bx" x="610" y="180" width="100" height="100" rx="8"/>
+    <text class="t" x="660" y="206" text-anchor="middle">Scheduler</text>
+    <text class="s" x="660" y="223" text-anchor="middle">queue</text>
+    <rect class="slot" id="q0" x="622" y="240" width="16" height="26" rx="3"/>
+    <rect class="slot" id="q1" x="641" y="240" width="16" height="26" rx="3"/>
+    <rect class="slot" id="q2" x="660" y="240" width="16" height="26" rx="3"/>
+    <rect class="slot" id="q3" x="679" y="240" width="16" height="26" rx="3"/>
+  </g>
+
+  <g class="comp" data-c="tok" tabindex="0" role="button" aria-label="Tokenizer">
+    <rect class="bx" x="756" y="66" width="218" height="56" rx="8"/>
+    <text class="t" x="770" y="90">Tokenizer</text>
+    <text class="s st" id="tokTxt" x="770" y="108">text → tokens</text>
+  </g>
+  <g class="comp" data-c="pre" tabindex="0" role="button" aria-label="Prefill">
+    <rect class="bx" x="756" y="142" width="218" height="56" rx="8"/>
+    <text class="t" x="770" y="166">Prefill</text>
+    <text class="s" x="770" y="182">all input tokens in parallel</text>
+    <rect class="pbarBg" x="770" y="186" width="190" height="5" rx="2.5"/>
+    <rect class="pbar" id="preBar" x="770" y="186" width="190" height="5" rx="2.5"/>
+  </g>
+  <g class="comp" data-c="kv" tabindex="0" role="button" aria-label="KV cache">
+    <rect class="bx" x="756" y="218" width="218" height="56" rx="8"/>
+    <text class="t" x="770" y="240">KV cache</text>
+    <g id="cells"></g>
+  </g>
+  <g class="comp" data-c="dec" tabindex="0" role="button" aria-label="Decode and sampling">
+    <rect class="bx" x="756" y="294" width="218" height="56" rx="8"/>
+    <text class="t" x="770" y="318">Decode + sampling</text>
+    <text class="s st" id="decTxt" x="770" y="337">next-token loop</text>
+  </g>
+  <g class="comp" data-c="detok" tabindex="0" role="button" aria-label="Detokenize and stream">
+    <rect class="bx" x="756" y="370" width="218" height="56" rx="8"/>
+    <text class="t" x="770" y="394">Detokenize + respond</text>
+    <text class="s st" id="detTxt" x="770" y="413">tokens → text</text>
+  </g>
+
+  <g class="comp" data-c="meter" tabindex="0" role="button" aria-label="Usage metering">
+    <rect class="bx" x="380" y="400" width="170" height="60" rx="8"/>
+    <text class="t" x="394" y="424">Usage metering</text>
+    <text class="s st" id="mTxt" x="394" y="443">counting tokens</text>
+  </g>
+
+  <g id="pkLayer"></g>
+</svg>
+        </div>
+        <div class="compInfo" id="compInfo" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail">
+    <div class="explain" aria-live="polite">
+      <span class="stepno" id="stepNo"></span>
+      <h2 id="stepTitle"></h2>
+      <p id="stepBody"></p>
+    </div>
+    <div>
+      <div class="codeHead"><span id="codeLabel">On the wire</span><span id="codeKind"></span></div>
+      <div class="code" id="code" tabindex="0" aria-label="Request and response data"></div>
+    </div>
+  </section>
+
+  <section class="panel model">
+    <h2>Inside the model server</h2>
+    <p class="sub">Three things happen to your prompt before you see a word. Tokens below are an approximation: the real tokenizer splits text differently.</p>
+    <div class="cols">
+      <div class="col" id="col1">
+        <h3><span class="n">1</span>Tokenize</h3>
+        <p class="cap">Text becomes tokens, the units the model reads and you are billed for.</p>
+        <div class="chips" id="tokIn"></div>
+        <span class="count" id="tokInCount"></span>
+      </div>
+      <div class="col" id="col2">
+        <h3><span class="n">2</span>Prefill</h3>
+        <p class="cap">All input tokens are processed in parallel and kept in a memory called the KV cache.</p>
+        <div class="bar"><i id="bar"></i></div>
+        <span class="count" id="prefillNote"></span>
+      </div>
+      <div class="col dec" id="col3">
+        <h3><span class="n">3</span>Decode</h3>
+        <p class="cap">One token is chosen, added to the text, and the model repeats until it stops.</p>
+        <div class="chips" id="tokOut"></div>
+        <span class="count" id="tokOutCount"></span>
+      </div>
+    </div>
+  </section>
+
+  <p class="note">Simplified on purpose. This follows the OpenAI-compatible endpoint of Alibaba Cloud Model Studio (international region shown; other regions use a different host), so OpenAI SDKs work with a changed base URL. Qwen models can also be downloaded and run on your own servers, in which case the gateway and metering stops disappear. Alibaba's internal routing and hardware are not public, so those stops show the general idea of how large language models are served. The reply in this animation is a fixed sample.</p>
+</main>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const tok = t => t.match(/\s?[\w'’]+|[^\s\w]/g) || [];
+  const REPLY = "Great question. This is a sample reply for the animation. The real model writes a fresh answer to your prompt, one token at a time.";
+  const REPLY_TOKENS = tok(REPLY);
+  const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const el = {
+    prompt:$('#prompt'), model:$('#model'), max:$('#max'), maxOut:$('#maxOut'), stream:$('#stream'), speed:$('#speed'),
+    play:$('#play'), back:$('#back'), next:$('#next'), pills:$('#pills'),
+    stepNo:$('#stepNo'), title:$('#stepTitle'), body:$('#stepBody'), code:$('#code'), codeKind:$('#codeKind'),
+    track:$('#track'), poly:$('#wirePoly'), packet:$('#packet'), appOut:$('#appOut'),
+    tokIn:$('#tokIn'), tokInCount:$('#tokInCount'), bar:$('#bar'), prefillNote:$('#prefillNote'),
+    tokOut:$('#tokOut'), tokOutCount:$('#tokOutCount'), c1:$('#col1'), c2:$('#col2'), c3:$('#col3')
+  };
+  const nodes = [...document.querySelectorAll('.node')];
+  const ports = nodes.map(n => n.querySelector('.port'));
+
+  const cfg = () => {
+    const prompt = el.prompt.value.trim() || 'Hello';
+    const max = +el.max.value;
+    const out = REPLY_TOKENS.slice(0, max);
+    return { prompt, model: el.model.value, max, stream: el.stream.checked, inT: tok(prompt), out,
+             stop: REPLY_TOKENS.length > max ? 'length' : 'stop' };
+  };
+  const clip = (t, n) => t.length > n ? t.slice(0, n - 1) + '…' : t;
+
+  /* ---------- steps ---------- */
+  const STEPS = [
+    { t:'Your app builds the request',
+      b:c => 'Your code, usually through an SDK, packs the prompt into a JSON body of messages and adds headers: your API key as a Bearer token and the content type. Nothing has left your machine yet. This is an HTTP POST ready to go.' },
+    { t:'The request crosses the internet, encrypted',
+      b:c => 'The client looks up dashscope-intl.aliyuncs.com, opens a connection and completes a TLS handshake. From then on everything on the wire is encrypted, including your API key and your prompt.' },
+    { t:'The API gateway checks it',
+      b:c => 'Before any model runs, the gateway authenticates your key, finds your Model Studio workspace, validates the JSON (real model name? messages well formed?) and checks your rate limits. If something fails you get an error straight away, such as 401, 400 or 429, and no model time is used.' },
+    { t:'It is routed to a model server',
+      b:c => 'An accepted request waits for free capacity, then is assigned to servers running ' + c.model + '. Capacity is shared, so a busy moment can add a short wait here.' },
+    { t:'Your prompt is split into tokens',
+      b:c => 'Qwen models do not read letters or whole words. A byte-level BPE tokenizer with a vocabulary of roughly 150,000 tokens cuts the text into tokens: common words, word pieces and punctuation. Your prompt is about ' + c.inT.length + ' tokens here. Tokens are also what limits and billing are measured in.' },
+    { t:'Prefill: the whole prompt is read at once',
+      b:c => 'The model processes all ' + c.inT.length + ' input tokens in parallel and keeps an internal memory of them, the KV cache. Long prompts make this step longer, which is why they delay the first output token. Context caching can reuse a repeated prefix instead of recomputing it.' },
+    { t:'Decode: the reply is written one token at a time',
+      b:c => 'The model predicts the next token, appends it, and repeats. Each token depends on everything before it. ' + '' + 'It stops when it decides it is done (finish_reason "stop") or reaches your max_tokens limit of ' + c.max + '. ' +
+             (c.stream ? 'Because stream is true, every token is sent back immediately as a server-sent event chunk.' : 'Because stream is false, the server holds everything back until the whole reply is ready.') },
+    { t:'The response travels back',
+      b:c => c.stream ? 'The last chunk carries the finish_reason, then data: [DONE] closes the stream. The chunks before them have already reached your app and were shown as they arrived.'
+                      : 'The finished reply comes back as one JSON object over the same encrypted connection. Your app saw nothing until now, so a long answer feels like a long wait.' },
+    { t:'Your app reads the result',
+      b:c => 'The SDK parses the response. You get the text in choices[0].message.content, a finish_reason that says why the model stopped, and a usage object with the prompt and completion token counts you are billed for.' + (c.stop === 'length' ? ' Here the reply was cut off by your max_tokens limit, so finish_reason is length.' : '') }
+  ];
+  const STEP_NODE = [0,1,2,3,3,3,3,0,0];
+  const TRAVEL = {1:1000,2:900,3:900,7:1700};
+
+  /* ---------- code line helpers ---------- */
+  const L = (h, cls) => '<div class="ln' + (cls ? ' ' + cls : '') + '">' + h + '</div>';
+  const kv = (k, v) => '<span class="k">' + k + '</span>' + v;
+  const comment = t => '<span class="c">' + esc(t) + '</span>';
+  const sse = obj => '<span class="k">data:</span> <span class="s">' + esc(JSON.stringify(obj)) + '</span>\n';
+  const chunk = (c, choice) => ({id:'chatcmpl-example', object:'chat.completion.chunk', model:c.model, choices:[Object.assign({index:0}, choice)]});
+  const httpHead = c => [
+    '<span class="ok">HTTP/1.1 200 OK</span>',
+    kv('content-type: ', c.stream ? 'text/event-stream' : 'application/json'),
+    ''
+  ];
+  const startEvents = c => [ sse(chunk(c, {delta:{role:'assistant', content:''}, finish_reason:null})) ];
+  const delta = t => sse({id:'chatcmpl-example', object:'chat.completion.chunk', choices:[{index:0, delta:{content:t}, finish_reason:null}]});
+  const tailEvents = c => [
+    sse(chunk(c, {delta:{}, finish_reason:c.stop})),
+    '<span class="k">data:</span> [DONE]\n'
+  ];
+  const fullJson = c => [
+    '{',
+    '  <span class="k">"id"</span>: <span class="s">"chatcmpl-example"</span>,',
+    '  <span class="k">"object"</span>: <span class="s">"chat.completion"</span>,',
+    '  <span class="k">"model"</span>: <span class="s">"' + c.model + '"</span>,',
+    '  <span class="k">"choices"</span>: [{ <span class="k">"index"</span>: 0, <span class="k">"message"</span>: { <span class="k">"role"</span>: <span class="s">"assistant"</span>, <span class="k">"content"</span>: <span class="s">' + esc(JSON.stringify(c.out.join(''))) + '</span> }, <span class="k">"finish_reason"</span>: <span class="s">"' + c.stop + '"</span> }],',
+    '  <span class="k">"usage"</span>: { <span class="k">"prompt_tokens"</span>: ' + c.inT.length + ', <span class="k">"completion_tokens"</span>: ' + c.out.length + ', <span class="k">"total_tokens"</span>: ' + (c.inT.length + c.out.length) + ' }',
+    '}'
+  ];
+
+  const LINES = {
+    0: c => [
+      '<span class="hl">POST</span> /compatible-mode/v1/chat/completions HTTP/1.1',
+      kv('Host: ', 'dashscope-intl.aliyuncs.com'),
+      kv('Authorization: ', 'Bearer sk-\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'),
+      kv('Content-Type: ', 'application/json'),
+      '',
+      '{',
+      '  <span class="k">"model"</span>: <span class="s">"' + c.model + '"</span>,',
+      '  <span class="k">"max_tokens"</span>: ' + c.max + ',',
+      '  <span class="k">"stream"</span>: ' + c.stream + ',',
+      '  <span class="k">"messages"</span>: [',
+      '    { <span class="k">"role"</span>: <span class="s">"user"</span>, <span class="k">"content"</span>: <span class="s">' + esc(JSON.stringify(clip(c.prompt, 70))) + '</span> }',
+      '  ]',
+      '}'
+    ],
+    1: c => [
+      comment('1  DNS   dashscope-intl.aliyuncs.com resolves to a server address'),
+      comment('2  TCP   connection opened (SYN, SYN-ACK, ACK)'),
+      comment('3  TLS   handshake done, session keys agreed'),
+      comment('4  HTTP  encrypted POST /compatible-mode/v1/chat/completions sent'),
+      '',
+      '<span class="ok">\u2713</span> Anyone watching the network sees only encrypted bytes'
+    ],
+    2: c => [
+      '<span class="ok">\u2713</span> Authorization     valid key, belongs to your workspace',
+      '<span class="ok">\u2713</span> request body      model and messages are valid',
+      '<span class="ok">\u2713</span> requests and tokens per minute in budget',
+      '<span class="hl">\u2192</span> forward to model servers',
+      '',
+      comment('If a check fails the gateway answers immediately:'),
+      comment('401 invalid key  \u00b7  400 bad request  \u00b7  429 rate limited')
+    ],
+    3: c => [
+      kv('queue     ', 'waiting for free capacity'),
+      kv('schedule  ', 'assigned to servers running ' + c.model),
+      kv('dispatch  ', 'request handed to the inference engine'),
+      '',
+      comment('Details of this layer are internal and not public.')
+    ],
+    4: c => [
+      kv('input    ', '<span class="s">' + esc(JSON.stringify(clip(c.prompt, 60))) + '</span>'),
+      kv('tokens   ', String(c.inT.length)),
+      '',
+      comment('Shown as chips in the panel below.')
+    ],
+    5: c => [
+      kv('prefill  ', c.inT.length + ' input tokens processed in parallel'),
+      kv('kv_cache ', 'keys and values stored for every input token'),
+      kv('prompt_tokens_details.cached_tokens ', '0'),
+      '',
+      comment('Context caching can reuse a repeated prefix.')
+    ],
+    8: c => [
+      comment('Python SDK'),
+      'text = completion.choices[0].message.content',
+      '  <span class="c">\u2192</span> <span class="s">' + esc(JSON.stringify(clip(c.out.join(''), 60))) + '</span>',
+      'completion.choices[0].finish_reason',
+      '  <span class="c">\u2192</span> <span class="s">"' + c.stop + '"</span>',
+      'completion.usage',
+      '  <span class="c">\u2192</span> prompt_tokens=' + c.inT.length + ', completion_tokens=' + c.out.length,
+      '',
+      comment('You are billed for those input and output tokens.')
+    ]
+  };
+
+  /* ---------- state + timing ---------- */
+  let step = 0, gen = 0, playing = false, idle = true, speed = 1;
+  const wait = (ms, my) => new Promise(r => setTimeout(() => r(my === gen), RM ? Math.min(ms, 120) : ms / speed));
+
+  /* ---------- geometry ---------- */
+  let centers = [];
+  const measure = () => {
+    const tr = el.track.getBoundingClientRect();
+    centers = ports.map(p => { const r = p.getBoundingClientRect(); return [r.left - tr.left + r.width / 2, r.top - tr.top + r.height / 2]; });
+    el.poly.setAttribute('points', centers.map(p => p.join(',')).join(' '));
+  };
+  const place = (i, dur) => {
+    el.packet.style.setProperty('--dur', (RM ? 0 : dur / speed) + 'ms');
+    const [x, y] = centers[i];
+    el.packet.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+  };
+  let packetNode = 0;
+  const layout = () => {
+    measure();
+    el.packet.style.transition = 'none';
+    place(packetNode, 0);
+    void el.packet.offsetWidth;
+    el.packet.style.transition = '';
+  };
+  const fly = (a, b, ms) => {
+    if (RM) return;
+    const d = document.createElement('div');
+    d.className = 'dot';
+    el.track.appendChild(d);
+    const f = i => 'translate(' + centers[i][0] + 'px,' + centers[i][1] + 'px)';
+    d.animate([{ transform: f(a), opacity: 1 }, { transform: f(b), opacity: .25 }], { duration: ms / speed, easing: 'ease-in' }).onfinish = () => d.remove();
+  };
+
+  /* ---------- rendering ---------- */
+  const chip = (t, cls) => { const s = document.createElement('span'); s.className = 'chip ' + (cls || ''); s.textContent = t.trim(); return s; };
+  const MAXCHIPS = 28;
+  const fillIn = c => {
+    el.tokIn.replaceChildren();
+    c.inT.slice(0, MAXCHIPS).forEach(t => el.tokIn.append(chip(t)));
+    if (c.inT.length > MAXCHIPS) el.tokIn.append(chip('+' + (c.inT.length - MAXCHIPS) + ' more', 'ph'));
+    el.tokInCount.textContent = c.inT.length + ' input tokens';
+  };
+  const stopChip = c => chip(c.stop === 'stop' ? 'stop' : 'length (limit reached)', 'stop');
+  const fillOut = c => {
+    el.tokOut.replaceChildren();
+    c.out.forEach(t => el.tokOut.append(chip(t, 'out')));
+    el.tokOut.append(stopChip(c));
+    el.tokOutCount.textContent = c.out.length + ' output tokens';
+  };
+  const setBar = (p, ms) => {
+    el.bar.style.transition = ms ? 'width ' + (ms / speed) + 'ms ease-out' : 'none';
+    el.bar.style.width = p + '%';
+  };
+  const setCode = arr => { el.code.innerHTML = arr.map(h => L(h)).join(''); el.code.scrollTop = 0; };
+  const addLine = h => { el.code.insertAdjacentHTML('beforeend', L(h)); el.code.scrollTop = el.code.scrollHeight; };
+  const setOn = i => nodes.forEach((n, k) => n.classList.toggle('on', k === i));
+  const WAITING = '<span class="muted">waiting for the response…</span>';
+  const outShell = inner => '<span class="tag">Response in your app</span>' + inner;
+
+  const paint = (n, c) => {
+    [...el.pills.children].forEach((b, i) => { b.classList.toggle('on', i === n); b.classList.toggle('done', i < n); b.setAttribute('aria-current', i === n ? 'step' : 'false'); });
+    el.stepNo.textContent = 'Step ' + (n + 1) + ' of ' + STEPS.length;
+    el.title.textContent = STEPS[n].t;
+    el.body.textContent = STEPS[n].b(c);
+    el.back.disabled = n === 0;
+    el.next.disabled = n === STEPS.length - 1;
+    el.track.dataset.phase = n >= 7 ? 'res' : 'req';
+    el.packet.className = 'packet ' + (n >= 7 ? 'res' : 'req');
+    setOn(n === 7 ? 3 : STEP_NODE[n]);
+    packetNode = STEP_NODE[n];
+    place(packetNode, TRAVEL[n] || 600);
+
+    el.c1.classList.toggle('live', n === 4);
+    el.c2.classList.toggle('live', n === 5);
+    el.c3.classList.toggle('live', n === 6);
+
+    if (n >= 4) fillIn(c); else { el.tokIn.replaceChildren(chip('waiting for a prompt', 'ph')); el.tokInCount.textContent = ''; }
+    if (n === 4) { el.tokIn.replaceChildren(); el.tokInCount.textContent = ''; }
+    if (n >= 6) setBar(100, 0); else setBar(0, 0);
+    el.prefillNote.textContent = n >= 6 ? c.inT.length + ' tokens in KV cache' : '';
+    if (n >= 7) fillOut(c); else { el.tokOut.replaceChildren(chip('no output yet', 'ph')); el.tokOutCount.textContent = ''; }
+
+    let out;
+    if (n >= 8 || (n === 7 && c.stream)) out = esc(c.out.join(''));
+    else if (n === 6 && c.stream) out = '<span class="caret"></span>';
+    else if (n >= 1) out = WAITING;
+    else out = '<span class="muted">nothing sent yet</span>';
+    el.appOut.innerHTML = outShell(out);
+
+    el.codeKind.textContent = n >= 7 ? 'response' : (n === 0 || n === 1 ? 'request' : 'server side');
+  };
+
+  const reveal = async (lines, my, gap) => {
+    el.code.replaceChildren();
+    for (const h of lines) {
+      if (!await wait(gap, my)) return false;
+      addLine(h);
+    }
+    return true;
+  };
+
+  const anim = async (n, c, my) => {
+    if (n === 0 || n === 8) {
+      await reveal(LINES[n](c), my, 140);
+    } else if (n >= 1 && n <= 3) {
+      await reveal(LINES[n](c), my, 260);
+      if (!await wait(Math.max(0, (TRAVEL[n] || 900) - 260 * LINES[n](c).length) + 100, my)) return;
+    } else if (n === 4) {
+      el.code.replaceChildren();
+      LINES[4](c).forEach(addLine);
+      for (let i = 0; i < Math.min(c.inT.length, MAXCHIPS); i++) {
+        if (!await wait(70, my)) return;
+        el.tokIn.append(chip(c.inT[i]));
+      }
+      if (c.inT.length > MAXCHIPS) el.tokIn.append(chip('+' + (c.inT.length - MAXCHIPS) + ' more', 'ph'));
+      el.tokInCount.textContent = c.inT.length + ' input tokens';
+      await wait(400, my);
+    } else if (n === 5) {
+      el.code.replaceChildren();
+      LINES[5](c).forEach(addLine);
+      el.prefillNote.textContent = 'reading ' + c.inT.length + ' tokens…';
+      await wait(60, my);
+      setBar(100, 1500);
+      if (!await wait(1600, my)) return;
+      el.prefillNote.textContent = c.inT.length + ' tokens in KV cache';
+    } else if (n === 6) {
+      const head = c.stream ? httpHead(c).concat(startEvents(c)) : [comment('# the server is generating the reply'), comment('# stream is false, so nothing is sent yet'), ''];
+      setCode(head);
+      const countLn = c.stream ? null : (addLine('tokens generated: 0'), el.code.lastElementChild);
+      el.tokOut.replaceChildren();
+      el.tokOutCount.textContent = '0 output tokens';
+      if (c.stream) el.appOut.innerHTML = outShell('<span class="caret"></span>');
+      let text = '';
+      for (let i = 0; i < c.out.length; i++) {
+        if (!await wait(150, my)) return;
+        el.tokOut.append(chip(c.out[i], 'out'));
+        el.tokOutCount.textContent = (i + 1) + ' output tokens';
+        if (c.stream) {
+          addLine(delta(c.out[i]));
+          text += c.out[i];
+          el.appOut.innerHTML = outShell(esc(text) + '<span class="caret"></span>');
+          fly(3, 0, 600);
+        } else countLn.textContent = 'tokens generated: ' + (i + 1);
+      }
+      if (!await wait(250, my)) return;
+      el.tokOut.append(stopChip(c));
+    } else if (n === 7) {
+      const travel = TRAVEL[7];
+      if (c.stream) {
+        setCode(httpHead(c).concat(startEvents(c), c.out.map(delta)));
+        el.code.scrollTop = el.code.scrollHeight;
+        if (!await wait(travel * .5, my)) return;
+        for (const h of tailEvents(c)) { addLine(h); if (!await wait(300, my)) return; }
+        if (!await wait(Math.max(0, travel * .5 - 900), my)) return;
+        el.appOut.innerHTML = outShell(esc(c.out.join('')));
+      } else {
+        setCode(httpHead(c).concat(fullJson(c)));
+        if (!await wait(travel + 100, my)) return;
+        el.appOut.innerHTML = outShell(esc(c.out.join('')));
+      }
+      setOn(0);
+    }
+  };
+
+  /* ---------- component diagram ---------- */
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const D = $('#diag'), pkLayer = $('#pkLayer'), dWrap = D.closest('.diagWrap');
+  const g = id => document.getElementById(id);
+  const PT = { C:[80,240], D:[255,65], E:[250,240], A:[465,127], V:[465,199], R:[465,271], Q:[660,230],
+               T:[865,94], P:[865,170], K:[865,246], X:[865,398], Dc:[865,322], M:[465,430] };
+  const RESP = [PT.X, [865,490], [250,490], [250,240], PT.C];
+  const COMPS = {
+    client:['Your app','Your code or an SDK builds the JSON request, adds the API key as a Bearer token and sends it over HTTPS. For streaming it reads server-sent events as they arrive.'],
+    dns:['DNS','Turns dashscope-intl.aliyuncs.com into a server address the client can connect to.'],
+    edge:['Edge proxy','Illustrative. The public front door. It ends the TLS connection and spreads traffic over many gateway instances.'],
+    auth:['Authentication','Checks the Authorization: Bearer header and finds the Model Studio workspace the key belongs to.'],
+    val:['Validation','Checks that the body is valid: a valid model name, well-formed messages and parameters. Bad requests fail here with a 400.'],
+    rate:['Rate limits','Compares your usage with your account limits for requests and tokens per minute. Over the limit returns 429.'],
+    queue:['Scheduler','Illustrative. Accepted requests wait for free capacity and are assigned to servers running the chosen model.'],
+    tok:['Tokenizer','Splits the prompt into tokens using byte-pair encoding. The count here is what prompt_tokens is based on.'],
+    pre:['Prefill','Runs the model over every input token in parallel. Long prompts make this step slower, which delays the first output token.'],
+    kv:['KV cache','Stores the attention keys and values of tokens already processed, so each new token does not recompute the whole prompt. Prompt caching can reuse it across requests.'],
+    dec:['Decode + sampling','Predicts a probability for every possible next token, picks one using settings such as temperature, appends it and loops until stop or the token limit.'],
+    detok:['Detokenize + respond','Turns tokens back into text. With stream true each piece is sent at once as a chunk; otherwise the reply is held and sent as one JSON object.'],
+    meter:['Usage metering','Records prompt and completion token counts for the request. They appear in the response usage object and drive billing and limits.']
+  };
+  const STEP_COMP = ['client','edge','auth','queue','tok','pre','dec','detok','meter'];
+  const DON = [['client'],['client'],['g-gw'],['queue'],['tok','g-inf'],['pre','kv','g-inf'],['dec','kv','g-inf'],['detok','g-inf'],['client']];
+  let dAnims = [];
+  const don = ids => {
+    D.querySelectorAll('.on').forEach(x => x.classList.remove('on'));
+    ids.forEach(i => { const e = g(i) || D.querySelector('[data-c="' + i + '"]'); if (e) e.classList.add('on'); });
+  };
+  const addOn = i => { const e = g(i) || D.querySelector('[data-c="' + i + '"]'); if (e) e.classList.add('on'); };
+  const offOn = i => { const e = g(i) || D.querySelector('[data-c="' + i + '"]'); if (e) e.classList.remove('on'); };
+  const showInfo = k => { const [t, d] = COMPS[k]; $('#compInfo').innerHTML = '<b>' + esc(t) + '</b><span>' + esc(d) + '</span>'; };
+  const dClear = () => { dAnims.forEach(a => a.cancel()); dAnims = []; pkLayer.replaceChildren(); };
+
+  const cellsG = g('cells');
+  const CELLS = [];
+  for (let i = 0; i < 16; i++) {
+    const r = document.createElementNS(SVGNS, 'rect');
+    r.setAttribute('class', 'cell'); r.setAttribute('x', 770 + i * 12); r.setAttribute('y', 248); r.setAttribute('width', 10); r.setAttribute('height', 16); r.setAttribute('rx', 2);
+    cellsG.append(r); CELLS.push(r);
+  }
+  const kvSet = (inN, outN) => CELLS.forEach((r, i) => { r.classList.toggle('lit', i < inN); r.classList.toggle('o', i >= inN && i < inN + outN); r.classList.toggle('lit', i < inN + outN); });
+  const slots = [0,1,2,3].map(i => g('q' + i));
+  const queueBase = on => slots.forEach((s, i) => { s.setAttribute('class', 'slot' + (on && i < 3 ? ' busy' : '')); });
+  const setBarD = (p, ms) => { const b = g('preBar'); b.style.transition = ms ? 'transform ' + (ms / speed) + 'ms ease-out' : 'none'; b.style.transform = 'scaleX(' + p + ')'; };
+
+  const dTravel = (pts, ms, cls) => new Promise(res => {
+    const c = document.createElementNS(SVGNS, 'circle');
+    c.setAttribute('r', cls && cls.includes('big') ? 9 : 6);
+    c.setAttribute('class', 'pk ' + (cls || 'req').replace(' big', ''));
+    pkLayer.append(c);
+    const lens = [0];
+    for (let i = 1; i < pts.length; i++) lens.push(lens[i - 1] + Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]));
+    const tot = lens[lens.length - 1] || 1;
+    const kf = pts.map((p, i) => ({ transform: 'translate(' + p[0] + 'px,' + p[1] + 'px)', offset: lens[i] / tot }));
+    const a = c.animate(kf, { duration: RM ? 1 : ms / speed, easing: 'ease-in-out', fill: 'forwards' });
+    dAnims.push(a);
+    a.onfinish = () => { c.remove(); res(true); };
+    a.oncancel = () => { c.remove(); res(false); };
+  });
+
+  const dPaint = (n, c) => {
+    dWrap.dataset.phase = n >= 7 ? 'res' : 'req';
+    don(DON[n]);
+    g('cStatus').textContent = n >= 7 ? 'reply received' : (n === 6 && c.stream) ? 'streaming…' : n >= 1 ? 'waiting…' : 'ready to send';
+    g('dTag').textContent = n >= 2 ? 'resolved' : 'dashscope-intl…';
+    g('eTag').textContent = n >= 2 ? 'TLS ✓ encrypted' : 'not connected';
+    [0,1,2].forEach(i => g('chk' + i).classList.toggle('show', n > 2));
+    queueBase(n <= 3);
+    g('tokTxt').textContent = n >= 4 ? c.inT.length + ' input tokens' : 'text → tokens';
+    setBarD(n >= 6 ? 1 : 0, 0);
+    kvSet(n >= 6 ? Math.min(16, c.inT.length) : 0, n >= 7 ? Math.min(16 - Math.min(16, c.inT.length), c.out.length) : 0);
+    g('decTxt').textContent = n >= 7 ? 'last token: ' + c.out[c.out.length - 1].trim() : 'next-token loop';
+    g('detTxt').textContent = n >= 7 ? (c.stream ? 'streamed ' : 'sent ') + c.out.length + ' tokens' : 'tokens → text';
+    g('mTxt').textContent = n >= 8 ? 'in ' + c.inT.length + ' · out ' + c.out.length : 'counting tokens';
+    showInfo(STEP_COMP[n]);
+  };
+
+  async function dAnim(n, c, my) {
+    const ok = () => my === gen;
+    const T = (p, ms, cls) => dTravel(p, ms, cls);
+    if (n === 1) {
+      addOn('dns');
+      if (!await T([PT.C, [80,65], PT.D], 450) || !ok()) return;
+      g('dTag').textContent = 'resolved';
+      if (!await T([PT.D, [80,65], PT.C], 350, 'res') || !ok()) return;
+      offOn('dns'); addOn('edge'); g('eTag').textContent = 'handshake…';
+      for (let i = 0; i < 2; i++) {
+        if (!await T([PT.C, PT.E], 280) || !ok()) return;
+        if (!await T([PT.E, PT.C], 280, 'res') || !ok()) return;
+      }
+      g('eTag').textContent = 'TLS ✓ encrypted';
+      await T([PT.C, PT.E], 350);
+    } else if (n === 2) {
+      if (!await T([PT.E, [335,240], [335,127], PT.A], 700) || !ok()) return;
+      const seq = [['auth', PT.A, PT.V], ['val', PT.V, PT.R], ['rate', PT.R, null]];
+      for (let i = 0; i < 3; i++) {
+        addOn(seq[i][0]);
+        await new Promise(r => setTimeout(r, RM ? 10 : 220 / speed)); if (!ok()) return;
+        g('chk' + i).classList.add('show');
+        if (seq[i][2] && (!await T([seq[i][1], seq[i][2]], 350) || !ok())) return;
+      }
+    } else if (n === 3) {
+      if (!await T([PT.R, [590,271], [590,230], PT.Q], 650) || !ok()) return;
+      slots[3].setAttribute('class', 'slot me');
+      await new Promise(r => setTimeout(r, RM ? 10 : 600 / speed)); if (!ok()) return;
+      slots.forEach((s, i) => setTimeout(() => { if (ok()) s.setAttribute('class', 'slot' + (i === 3 ? ' me' : '')); }, i * 90 / speed));
+      await T([PT.Q, [725,230], [725,94], PT.T], 800);
+    } else if (n === 4) {
+      const k = Math.min(c.inT.length, 12);
+      let last;
+      for (let i = 0; i < k; i++) {
+        if (i === 0) g('tokTxt').textContent = '0 input tokens';
+        last = T([PT.T, PT.P], 380);
+        const cnt = Math.round((i + 1) / k * c.inT.length);
+        g('tokTxt').textContent = cnt + ' input tokens';
+        await new Promise(r => setTimeout(r, RM ? 5 : 70 * Math.max(1, Math.min(c.inT.length, 28)) / k / speed)); if (!ok()) return;
+      }
+      g('tokTxt').textContent = c.inT.length + ' input tokens';
+      await last;
+    } else if (n === 5) {
+      const total = Math.min(16, c.inT.length);
+      setBarD(0, 0); void g('preBar').getBoundingClientRect();
+      setBarD(1, 1500);
+      const ps = [];
+      for (let i = 0; i < 3; i++) { ps.push(T([PT.P, PT.K], 420)); await new Promise(r => setTimeout(r, RM ? 5 : 450 / speed)); if (!ok()) return; }
+      kvSet(0, 0);
+      for (let i = 1; i <= total; i++) {
+        kvSet(i, 0);
+        await new Promise(r => setTimeout(r, RM ? 2 : 1200 / total / speed)); if (!ok()) return;
+      }
+      await Promise.all(ps);
+    } else if (n === 6) {
+      const base = Math.min(16, c.inT.length);
+      kvSet(base, 0);
+      let last = Promise.resolve();
+      for (let i = 0; i < c.out.length; i++) {
+        await new Promise(r => setTimeout(r, RM ? 5 : 150 / speed)); if (!ok()) return;
+        g('decTxt').textContent = 'token ' + (i + 1) + ': ' + c.out[i].trim();
+        kvSet(base, Math.min(i + 1, 16 - base));
+        T([PT.K, PT.Dc], 160, 'req');
+        if (c.stream) {
+          g('detTxt').textContent = 'streaming ' + (i + 1) + ' tokens';
+          last = T([PT.Dc, PT.X].concat(RESP.slice(1)), 1100, 'res');
+        } else g('detTxt').textContent = 'buffering ' + (i + 1) + ' tokens';
+      }
+      await last;
+    } else if (n === 7) {
+      addOn('meter');
+      T([PT.X, [620,398], [620,430], [550,430]], 700, 'use').then(() => { if (ok()) g('mTxt').textContent = 'in ' + c.inT.length + ' · out ' + c.out.length; });
+      g('detTxt').textContent = c.stream ? 'final events sent' : 'sending JSON';
+      await T(RESP, 1700, 'res big');
+      if (!ok()) return;
+      offOn('meter'); don(['client']);
+      g('cStatus').textContent = 'reply received';
+    }
+  }
+
+  D.querySelectorAll('.comp').forEach(e => {
+    const k = e.dataset.c;
+    e.addEventListener('click', () => showInfo(k));
+    e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); showInfo(k); } });
+  });
+
+  const tabs = { diag:[g('tabDiag'), g('viewDiagram')], journey:[g('tabJourney'), g('viewJourney')] };
+  const showView = v => {
+    Object.entries(tabs).forEach(([k, [b, p]]) => { b.setAttribute('aria-selected', String(k === v)); p.hidden = k !== v; });
+    layout();
+  };
+  tabs.diag[0].addEventListener('click', () => showView('diag'));
+  tabs.journey[0].addEventListener('click', () => showView('journey'));
+
+  async function goTo(n) {
+    gen++; const my = gen;
+    step = n; idle = false;
+    const c = cfg();
+    dClear();
+    paint(n, c);
+    dPaint(n, c);
+    updateBtn();
+    await Promise.all([anim(n, c, my), dAnim(n, c, my)]);
+    if (my !== gen) return;
+    idle = true;
+    if (playing) {
+      if (n < STEPS.length - 1) {
+        if (!await wait(900, my)) return;
+        if (playing) goTo(n + 1);
+      } else playing = false;
+    }
+    updateBtn();
+  }
+
+  function updateBtn() {
+    el.play.textContent = playing ? 'Pause' : step === 0 ? 'Send request' : step === STEPS.length - 1 ? 'Replay' : 'Resume';
+  }
+
+  /* ---------- wiring ---------- */
+  STEPS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = i + 1; b.title = s.t; b.setAttribute('aria-label', 'Step ' + (i + 1) + ': ' + s.t);
+    b.addEventListener('click', () => { playing = false; goTo(i); });
+    el.pills.append(b);
+  });
+  el.play.addEventListener('click', () => {
+    if (playing) { playing = false; updateBtn(); return; }
+    playing = true;
+    if (step === STEPS.length - 1) goTo(0);
+    else if (idle) goTo(step + 1);
+    else updateBtn();
+  });
+  el.next.addEventListener('click', () => { playing = false; goTo(Math.min(step + 1, STEPS.length - 1)); });
+  el.back.addEventListener('click', () => { playing = false; goTo(Math.max(step - 1, 0)); });
+  el.speed.addEventListener('change', () => { speed = +el.speed.value; });
+
+  let t;
+  const restart = () => { playing = false; clearTimeout(t); t = setTimeout(() => goTo(0), 250); };
+  el.max.addEventListener('input', () => { el.maxOut.textContent = el.max.value; restart(); });
+  ['input'].forEach(ev => el.prompt.addEventListener(ev, restart));
+  el.model.addEventListener('change', restart);
+  el.stream.addEventListener('change', restart);
+
+  new ResizeObserver(layout).observe(el.track);
+  addEventListener('resize', layout);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
+
+  measure();
+  layout();
+  goTo(0);
+})();
+</script>
