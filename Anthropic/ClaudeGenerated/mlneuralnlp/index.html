@@ -1,4 +1,8 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ML, Neural Nets &amp; NLP Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -181,6 +185,9 @@ input[type="range"] { accent-color: var(--nn); width: 110px; }
 .tok.mod { border-style: dashed; border-color: var(--nlp); }
 button.tok { cursor: pointer; font: inherit; font-family: var(--f-mono); font-size: .82rem; }
 button.tok.sel { background: var(--nlp); color: var(--bg); border-color: var(--nlp); }
+button.tok.sel small { color: inherit; opacity: .85; }
+button.tok.sel .attn { background: color-mix(in srgb, var(--bg) 35%, transparent); }
+button.tok.sel .attn i { background: var(--bg); }
 .vec { display: flex; gap: 2px; height: 26px; align-items: center; }
 .vec span { width: 5px; background: var(--nlp); border-radius: 1px; }
 .attn { width: 100%; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
@@ -199,8 +206,8 @@ button.tok.sel { background: var(--nlp); color: var(--bg); border-color: var(--n
 .emb .w circle { fill: var(--nlp); transition: r .2s; }
 .emb .w.hi circle { r: 8; fill: var(--ink); }
 .emb .w.dim { opacity: .3; }
-.emb .vecline { stroke-width: 3; fill: none; stroke-linecap: round; stroke-dasharray: 260; stroke-dashoffset: 260; transition: stroke-dashoffset 1s ease; }
-.emb .vecline.go { stroke-dashoffset: 0; }
+.emb .vecline { stroke-width: 3; fill: none; stroke-linecap: round; stroke-dasharray: 260; stroke-dashoffset: 260; opacity: 0; transition: stroke-dashoffset 1s ease, opacity .1s; }
+.emb .vecline.go { stroke-dashoffset: 0; opacity: 1; }
 
 /* Compare */
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 24px; }
@@ -252,6 +259,8 @@ footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
 </style>
+</head>
+<body>
 
 <nav class="top" aria-label="Sections">
   <div class="wrap">
@@ -509,10 +518,14 @@ function rgb(hex) {
 }
 function fit(canvas) {
   const dpr = window.devicePixelRatio || 1;
-  const w = canvas.clientWidth, h = canvas.getAttribute("height") | 0;
+  /* The height attribute IS the canvas backing-store height: assigning canvas.height below overwrites it.
+     Read it once as the CSS height and cache it, otherwise every call re-scales the scaled value
+     (340 -> 425 -> 531 ...) on any display where devicePixelRatio is not exactly 1. */
+  if (canvas._h == null) canvas._h = canvas.getAttribute("height") | 0;
+  const w = canvas.clientWidth, h = canvas._h;
   canvas.style.height = h + "px";
-  if (canvas.width !== Math.round(w * dpr) || canvas._h !== h) {
-    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); canvas._h = h;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
   }
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -555,7 +568,9 @@ const ML = (() => {
   const sizes = [45, 55, 62, 70, 78, 88, 96, 104, 115, 122, 134, 146, 158, 170, 186, 198];
   const base = sizes.map(s => ({ s, p: 1.9 * s + 52 + (r() - 0.5) * 80 }));
   let pts = base.map(p => ({ ...p }));
-  let w = 0, b = 0.12, iter = 0, hist = [], training = false, phase = -1, raf = 0;
+  let w = 0, b = 0.12, iter = 0, hist = [], training = false, phase = -1;
+  let vw = 0, vb = 0.12;            // drawn line (glides toward w, b)
+  let rounds = 0, timer = 0, glideRaf = 0;
   const X0 = 30, X1 = 210, Y0 = 0, Y1 = 500;
   const nx = s => (s - 40) / 160, ny = p => p / 500;
   const pad = { l: 46, r: 12, t: 12, b: 34 };
@@ -568,11 +583,11 @@ const ML = (() => {
     if (!pts.length) return;
     let dw = 0, db = 0;
     pts.forEach(p => { const e = w * nx(p.s) + b - ny(p.p); dw += e * nx(p.s); db += e; });
-    const n = pts.length, lr = 0.9;
+    const n = pts.length, lr = 0.25;
     w -= lr * 2 * dw / n; b -= lr * 2 * db / n;
     iter++; hist.push(Math.sqrt(loss()) * 500); if (hist.length > 400) hist.shift();
   }
-  function predict(s) { return (w * nx(s) + b) * 500; }
+  function predict(s) { return (vw * nx(s) + vb) * 500; }
 
   function draw() {
     const { ctx, w: W, h: H } = fit(cv);
@@ -636,31 +651,57 @@ const ML = (() => {
     $$("#mlLoop div").forEach((d, i) => d.classList.toggle("on", i === phase));
   }
 
-  function loop() {
-    step(); step();
-    phase = Math.floor(iter / 8) % 4;
-    draw();
-    const flat = hist.length > 20 && Math.abs(hist[hist.length - 20] - hist[hist.length - 1]) < 0.02;
-    if (training && iter < 2000 && !flat) raf = requestAnimationFrame(loop);
-    else stop();
+  /* Pacing: one "round" = predict, measure, direction, nudge. Early rounds are slow enough to
+     follow; later rounds speed up and take several small steps per nudge until the error flattens. */
+  const phaseMs = r => reduce ? 30 : Math.max(60, 420 * Math.pow(0.68, r));
+  const stepsFor = r => r < 3 ? 1 : r < 6 ? 2 : r < 10 ? 4 : 8;
+
+  function glide(ms) {
+    cancelAnimationFrame(glideRaf);
+    if (reduce || ms < 20) { vw = w; vb = b; draw(); return; }
+    const w0 = vw, b0 = vb, t0 = performance.now();
+    const go = now => {
+      const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+      vw = w0 + (w - w0) * e; vb = b0 + (b - b0) * e; draw();
+      if (k < 1) glideRaf = requestAnimationFrame(go);
+    };
+    glideRaf = requestAnimationFrame(go);
   }
-  function start() { if (!pts.length) return; training = true; $("#mlTrain").textContent = "Pause"; raf = requestAnimationFrame(loop); }
-  function stop() { training = false; cancelAnimationFrame(raf); phase = -1; $("#mlTrain").textContent = "Train"; draw(); }
+
+  function tick() {
+    if (!training) return;
+    phase = (phase + 1) % 4;
+    if (phase === 3) { for (let i = stepsFor(rounds); i > 0; i--) step(); glide(phaseMs(rounds) * 0.85); }
+    else draw();
+    if (phase === 3) {
+      rounds++;
+      const flat = hist.length > 20 && Math.abs(hist[hist.length - 20] - hist[hist.length - 1]) < 0.02;
+      if (iter >= 1500 || flat) { timer = setTimeout(stop, phaseMs(rounds)); return; }
+    }
+    timer = setTimeout(tick, phaseMs(rounds));
+  }
+  function start() {
+    if (!pts.length) return;
+    if (!hist.length) rounds = 0;
+    training = true; phase = -1; $("#mlTrain").textContent = "Pause"; tick();
+  }
+  function stop() { training = false; clearTimeout(timer); phase = -1; $("#mlTrain").textContent = "Train"; draw(); }
 
   let stepping = false;
   function stepOnce() {
     if (stepping || !pts.length) return; if (training) stop();
     stepping = true;
-    const seq = [0, 1, 2, 3];
+    const seq = [0, 1, 2, 3], ms = reduce ? 50 : 550;
     seq.forEach((ph, i) => setTimeout(() => {
-      phase = ph; if (ph === 3) step(); draw();
-      if (i === seq.length - 1) setTimeout(() => { phase = -1; draw(); stepping = false; }, 550);
-    }, i * (reduce ? 50 : 550)));
+      phase = ph;
+      if (ph === 3) { step(); glide(ms * 0.8); } else draw();
+      if (i === seq.length - 1) setTimeout(() => { phase = -1; draw(); stepping = false; }, ms);
+    }, i * ms));
   }
 
   $("#mlTrain").addEventListener("click", () => training ? stop() : start());
   $("#mlStep").addEventListener("click", stepOnce);
-  $("#mlReset").addEventListener("click", () => { stop(); w = 0; b = 0.12; iter = 0; hist = []; draw(); });
+  $("#mlReset").addEventListener("click", () => { stop(); cancelAnimationFrame(glideRaf); w = 0; b = 0.12; vw = w; vb = b; iter = 0; hist = []; rounds = 0; draw(); });
   $("#mlClear").addEventListener("click", () => { stop(); pts = []; hist = []; iter = 0; draw(); });
   cv.addEventListener("pointerdown", e => {
     const rc = cv.getBoundingClientRect(), W = rc.width, H = cv._h || 340;
@@ -925,7 +966,7 @@ const NLP = (() => {
     const a = selected >= 0 ? attention(selected) : null;
     box.innerHTML = norm.map((t, i) => {
       const p = a ? a[i] : 0;
-      return `<button class="tok ${i === selected ? "sel" : ""}" data-i="${i}" style="${a ? `background:color-mix(in srgb, var(--nlp) ${Math.round(p * 85)}%, var(--sunk))` : ""}">${esc(t)}<small>${a ? Math.round(p * 100) + "%" : "&nbsp;"}</small><span class="attn"><i style="width:${Math.round((a ? p : 0) * 100)}%"></i></span></button>`;
+      return `<button class="tok ${i === selected ? "sel" : ""}" data-i="${i}" style="${a && i !== selected ? `background:color-mix(in srgb, var(--nlp) ${Math.round(p * 85)}%, var(--sunk))` : ""}">${esc(t)}<small>${a ? Math.round(p * 100) + "%" : "&nbsp;"}</small><span class="attn"><i style="width:${Math.round((a ? p : 0) * 100)}%"></i></span></button>`;
     }).join("");
   }
 
@@ -972,7 +1013,7 @@ const NLP = (() => {
 
   /* embedding map */
   const words = [
-    ["king", 430, 92, "royal"], ["queen", 500, 152, "royal"], ["prince", 470, 58, "royal"], ["princess", 540, 112, "royal"],
+    ["king", 430, 92, "royal"], ["queen", 500, 152, "royal"], ["prince", 470, 58, "royal"], ["princess", 515, 112, "royal"],
     ["man", 250, 172, "people"], ["woman", 320, 232, "people"], ["boy", 205, 140, "people"], ["girl", 275, 200, "people"],
     ["cat", 80, 285, "animal"], ["dog", 135, 305, "animal"], ["kitten", 60, 250, "animal"], ["puppy", 120, 345, "animal"],
     ["pizza", 430, 300, "food"], ["pasta", 495, 320, "food"], ["bread", 400, 345, "food"],
@@ -1113,5 +1154,5 @@ const NLP = (() => {
 })();
 })();
 </script>
-
-</body></html>
+</body>
+</html>
