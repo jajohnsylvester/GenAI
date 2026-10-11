@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Linear algebra inside a language model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..600&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDF0F4; --panel:#FFFFFF; --ink:#16223B; --muted:#56627A; --line:#C6CFDB; --grid:#DDE3EB;
+  --teal:#0E7C7B; --rose:#C2185B; --amber:#C98A0B; --blue:#3A64B0;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1623; --panel:#162131; --ink:#E8EDF5; --muted:#9AA7BA; --line:#2B3A50; --grid:#1B2739;
+    --teal:#3CC4C0; --rose:#FF6B9A; --amber:#F2B33D; --blue:#7FA6F0;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1623; --panel:#162131; --ink:#E8EDF5; --muted:#9AA7BA; --line:#2B3A50; --grid:#1B2739;
+  --teal:#3CC4C0; --rose:#FF6B9A; --amber:#F2B33D; --blue:#7FA6F0;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 64px)}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:'Newsreader',Georgia,'Times New Roman',serif; font-size:18px; line-height:1.6;
+  -webkit-text-size-adjust:100%;
+}
+.ui,button,input,output,label,table,.top,.mx,.legend,.note{font-family:'Instrument Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+
+/* header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--paper);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:22px;height:52px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.bar::-webkit-scrollbar{display:none}
+.brand{font-weight:600;font-size:15px;text-decoration:none;color:var(--ink)}
+.bar nav{display:flex;gap:18px}
+.bar nav a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none}
+.bar nav a:hover{color:var(--ink)}
+
+/* hero */
+.hero{position:relative;padding:56px 0 72px;overflow:hidden}
+.hero::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:36px 36px;
+  -webkit-mask-image:linear-gradient(to bottom,#000 30%,transparent 100%);
+  mask-image:linear-gradient(to bottom,#000 30%,transparent 100%);
+}
+.hero .wrap{position:relative}
+.hero-grid{align-items:center}
+h1{font-weight:500;font-size:clamp(40px,6.4vw,78px);line-height:1.02;letter-spacing:-0.022em;margin:0 0 24px}
+.lede{font-size:21px;line-height:1.5;color:var(--muted);max-width:34em;margin:0}
+.hero-fig{margin:0}
+.hero-fig canvas{display:block;width:100%;aspect-ratio:1/1;border-radius:3px}
+.hero-row{display:flex;gap:20px;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap}
+.hero-name{font-weight:600;font-size:16px}
+.hero-desc{font-size:14px;color:var(--muted);margin:2px 0 10px;max-width:22em}
+
+/* layout */
+.split{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:48px;align-items:start}
+@media (max-width:880px){.split{grid-template-columns:minmax(0,1fr);gap:28px}.hero{padding-top:36px}}
+section.blk{padding:84px 0;border-top:1px solid var(--line)}
+h2{font-weight:500;font-size:clamp(28px,3.6vw,42px);line-height:1.12;letter-spacing:-0.015em;margin:0 0 18px}
+.prose p{margin:0 0 1em;max-width:34em}
+.prose .aside{font-size:16px;color:var(--muted)}
+.prose strong{font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px}
+
+/* controls */
+button{
+  font-size:14px;font-weight:500;padding:8px 12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  border-radius:4px;cursor:pointer;line-height:1.2;
+}
+button:hover{border-color:var(--ink)}
+button[aria-pressed="true"],button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+input[type=range]{width:100%;accent-color:var(--teal);margin:0}
+output{font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);margin:8px 0 0}
+.legend i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+.note{font-size:14px;color:var(--muted);margin:10px 0 0;min-height:1.4em}
+.read{display:grid;gap:2px;font-size:14px;margin-top:12px}
+.read b{font-weight:600;font-variant-numeric:tabular-nums}
+
+/* matrix display */
+.mx{
+  display:inline-grid;grid-template-columns:repeat(2,3.4em);gap:4px 14px;padding:6px 14px;
+  border-left:2px solid var(--ink);border-right:2px solid var(--ink);border-radius:8px;
+  font-weight:600;font-size:20px;font-variant-numeric:tabular-nums;text-align:right;
+}
+.mx .c1{color:var(--rose)}.mx .c2{color:var(--teal)}
+
+/* layer section */
+.canvas-sq{display:block;width:100%;aspect-ratio:1/1}
+.msl{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;margin-top:14px}
+.msl label{display:grid;grid-template-columns:1.2em 1fr 3.2em;gap:8px;align-items:center;font-size:14px}
+.msl label span{font-weight:600}
+.msl .s1{accent-color:var(--rose)}.msl .s1 span{color:var(--rose)}
+.msl .s2{accent-color:var(--teal)}.msl .s2 span{color:var(--teal)}
+.msl output{text-align:right;font-size:13px}
+.relu{display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:14px}
+.relu input{margin-top:3px;accent-color:var(--blue)}
+
+/* embeddings */
+#embSvg{display:block;width:100%;height:auto;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.egrid{stroke:var(--grid);stroke-width:1}
+.eaxis{stroke:var(--line);stroke-width:1.5}
+.wlab{font:500 14px 'Instrument Sans',system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+#pline{stroke:var(--amber);stroke-width:3}
+#pdot{fill:var(--amber);stroke:var(--ink);stroke-width:2;cursor:grab}
+#probe{touch-action:none;cursor:grab}
+#probe:focus-visible{outline:none}
+#probe:focus-visible #pdot{stroke-width:5}
+#ring{fill:none;stroke:var(--ink);stroke-width:2}
+#trail{fill:none;stroke:var(--ink);stroke-width:2;stroke-dasharray:5 5}
+.cos{display:grid;gap:6px;margin-top:14px}
+.cos-row{display:grid;grid-template-columns:5.5em 1fr 3.4em;gap:10px;align-items:center;font-size:14px}
+.cos-row .track{height:10px;background:var(--grid);border-radius:2px;overflow:hidden}
+.cos-row .track i{display:block;height:100%;background:var(--teal);transition:width .15s}
+.cos-row.best{font-weight:600}
+.cos-row b{text-align:right;font-weight:500;font-variant-numeric:tabular-nums}
+.formula{font-size:14px;margin:14px 0 0;padding:10px 12px;background:var(--paper);border-radius:3px;font-variant-numeric:tabular-nums}
+
+/* attention */
+.tokrow{display:flex;flex-wrap:wrap;gap:6px}
+.tokrow button{padding:6px 10px;font-size:15px}
+.att-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;margin-top:16px}
+@media (max-width:640px){.att-grid{grid-template-columns:minmax(0,1fr)}}
+#qkPlane{display:block;width:100%;height:auto;background:var(--paper);border-radius:3px}
+.pax{stroke:var(--line);stroke-width:1}
+.kar{stroke:var(--blue);stroke-width:3;stroke-linecap:round}
+.kdot{fill:var(--blue)}
+.klab{font:500 12px 'Instrument Sans',system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--paper);stroke-width:3px}
+.qar{stroke:var(--rose);stroke-width:4;stroke-linecap:round}
+.qdot{fill:var(--rose)}
+.qlab{font:600 12px 'Instrument Sans',system-ui,sans-serif;fill:var(--rose);paint-order:stroke;stroke:var(--paper);stroke-width:3px}
+.abar{display:grid;grid-template-columns:5.4em 1fr 3em;gap:8px;align-items:center;font-size:14px;margin-bottom:5px}
+.abar .track{height:12px;background:var(--grid);border-radius:2px;overflow:hidden}
+.abar .track i{display:block;height:100%;background:var(--blue);transition:width .35s}
+.abar.top1 .track i{background:var(--rose)}
+.abar b{text-align:right;font-weight:500;font-variant-numeric:tabular-nums}
+.sharp{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;margin-top:16px;font-size:14px}
+.heatwrap{overflow-x:auto;margin-top:18px}
+.heat{border-collapse:separate;border-spacing:2px;font-size:12px}
+.heat th{font-weight:500;color:var(--muted);padding:0}
+.heat thead th{vertical-align:bottom;height:64px}
+.heat thead th span{writing-mode:vertical-rl;transform:rotate(180deg);padding:2px}
+.heat tbody th{text-align:right;padding-right:6px}
+.heat tbody th button{border:0;background:none;padding:2px 4px;font-size:12px;color:var(--muted)}
+.heat tr.sel th button{color:var(--ink);font-weight:600}
+.heat td{position:relative;width:26px;height:22px;background:var(--grid);border-radius:2px}
+.heat td::after{content:"";position:absolute;inset:0;background:var(--teal);opacity:var(--w);border-radius:2px}
+.heat tr.sel td{box-shadow:0 0 0 2px var(--rose)}
+.mix{font-size:15px;margin:16px 0 0}
+
+/* scale */
+.scale-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;margin-top:6px}
+@media (max-width:640px){.scale-grid{grid-template-columns:minmax(0,1fr)}}
+.srow{display:grid;grid-template-columns:7.4em 1fr 5em;gap:10px;align-items:center;font-size:14px;margin:10px 0}
+.srow output{text-align:right;font-weight:600}
+.big{font-size:30px;font-weight:500;letter-spacing:-0.01em;line-height:1.1;font-variant-numeric:tabular-nums}
+.big small{display:block;font:500 13px 'Instrument Sans',system-ui,sans-serif;color:var(--muted);margin-top:4px;letter-spacing:0}
+.stat{margin:14px 0}
+.sqwrap{width:190px;height:190px;border:1px dashed var(--line);position:relative}
+.sqwrap #sqBox{position:absolute;left:0;top:0;background:var(--teal);opacity:.85;transition:width .25s,height .25s}
+.blocks{display:flex;flex-wrap:wrap;gap:3px;margin-top:10px}
+.blocks i{width:12px;height:12px;background:var(--blue);border-radius:2px;display:block}
+.split-bar{display:flex;height:14px;border-radius:2px;overflow:hidden;margin:6px 0 4px}
+.split-bar i{display:block}
+
+/* low rank */
+.lr-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.lr-grid canvas{display:block;width:100%;aspect-ratio:1/1;image-rendering:pixelated;background:var(--panel);border:1px solid var(--line)}
+.lr-cap{font-size:13px;color:var(--muted);margin-top:6px}
+
+/* recap */
+.recap{margin:0;display:grid;gap:0;max-width:760px}
+.recap div{display:grid;grid-template-columns:11em 1fr;gap:20px;padding:16px 0;border-top:1px solid var(--line)}
+.recap dt{font-weight:600;font-family:'Instrument Sans',system-ui,sans-serif;font-size:15px}
+.recap dd{margin:0}
+@media (max-width:640px){.recap div{grid-template-columns:1fr;gap:4px}}
+.fine{font-size:15px;color:var(--muted);max-width:44em;margin-top:36px}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="#top">Linear algebra in LLMs</a>
+    <nav aria-label="Sections">
+      <a href="#words">Words as vectors</a>
+      <a href="#layers">Layers</a>
+      <a href="#attention">Attention</a>
+      <a href="#scale">Scale</a>
+      <a href="#lowrank">Low rank</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero">
+  <div class="wrap split hero-grid">
+    <div>
+      <h1>Inside a language model, almost everything is a matrix</h1>
+      <p class="lede">Your prompt becomes lists of numbers, and those numbers pass through layers of matrix multiplication. A handful of ideas from linear algebra do most of the work. Each one below is something you can move.</p>
+    </div>
+    <figure class="panel hero-fig">
+      <canvas id="heroCv" role="img" aria-label="A grid of the plane being rotated, stretched and sheared by a 2 by 2 matrix"></canvas>
+      <div class="hero-row">
+        <div class="mx" aria-label="Current matrix"><span class="c1" id="hm0">1.00</span><span class="c2" id="hm1">0.00</span><span class="c1" id="hm2">0.00</span><span class="c2" id="hm3">1.00</span></div>
+        <div>
+          <div class="hero-name ui" id="heroName">Identity</div>
+          <div class="hero-desc ui" id="heroDesc">Every point stays where it is.</div>
+          <button id="heroNext" type="button">Next transformation</button>
+        </div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- 1. Words -->
+<section class="blk" id="words">
+  <div class="wrap split">
+    <div class="prose">
+      <h2>Words become points in space</h2>
+      <p>A model can't read letters. It first swaps each token for a vector: a list of hundreds or thousands of numbers. Tokens with related meanings end up pointing in similar directions, so geometry carries meaning.</p>
+      <p>Here the space has two dimensions so you can see it. <strong>Drag the amber point.</strong> The list ranks words by cosine similarity, the cosine of the angle between two vectors. A value of 1 means they point the same way.</p>
+      <p class="aside">Directions mean things too. The step from <em>man</em> to <em>king</em> is nearly the same step as <em>woman</em> to <em>queen</em>, so vector arithmetic can follow an analogy.</p>
+    </div>
+    <div class="panel">
+      <svg id="embSvg" viewBox="0 0 600 440" role="img" aria-label="Two-dimensional map of word vectors with a draggable probe vector"></svg>
+      <div class="legend"><span><i style="background:var(--rose)"></i>people and roles</span><span><i style="background:var(--teal)"></i>animals</span><span><i style="background:var(--amber)"></i>fruit</span></div>
+      <div class="chips ui">
+        <button type="button" data-pos="-3.5,-3.0">Near the animals</button>
+        <button type="button" data-pos="3.4,-3.2">Near the fruit</button>
+        <button type="button" id="anBtn">Try king − man + woman</button>
+      </div>
+      <p class="note" id="anNote" aria-live="polite"></p>
+      <div class="cos" id="cosList"></div>
+      <p class="formula" id="cosFormula"></p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Layers -->
+<section class="blk" id="layers">
+  <div class="wrap split">
+    <div class="prose">
+      <h2>A layer is a matrix that moves every point</h2>
+      <p>Each layer of a neural network multiplies its input vector by a weight matrix. In two dimensions you can watch that happen. The blue grid is the plane after the matrix has pushed it around.</p>
+      <p>The two arrows show where the axes land, and they are the matrix's columns: the pink arrow is the left column, the teal arrow is the right column. Change a number and the whole plane follows. Real models do the same in thousands of dimensions, with matrices learned from data.</p>
+      <p class="aside" id="layDesc">Pick a preset or drag the sliders.</p>
+    </div>
+    <div class="panel">
+      <canvas id="layCv" class="canvas-sq" role="img" aria-label="Plane transformed by an adjustable 2 by 2 matrix"></canvas>
+      <div class="legend"><span><i style="background:var(--rose)"></i>where the x-axis lands</span><span><i style="background:var(--teal)"></i>where the y-axis lands</span><span><i style="background:var(--amber)"></i>the unit square</span></div>
+      <div class="chips ui" id="layPre"></div>
+      <div class="msl ui">
+        <label class="s1"><span>a</span><input id="sa" type="range" min="-2" max="2" step="0.05" value="1" aria-label="Matrix entry a, top left"><output id="oa">1.00</output></label>
+        <label class="s2"><span>b</span><input id="sb" type="range" min="-2" max="2" step="0.05" value="0" aria-label="Matrix entry b, top right"><output id="ob">0.00</output></label>
+        <label class="s1"><span>c</span><input id="sc" type="range" min="-2" max="2" step="0.05" value="0" aria-label="Matrix entry c, bottom left"><output id="oc">0.00</output></label>
+        <label class="s2"><span>d</span><input id="sd" type="range" min="-2" max="2" step="0.05" value="1" aria-label="Matrix entry d, bottom right"><output id="od">1.00</output></label>
+      </div>
+      <div class="read ui">
+        <div>Area scale (determinant): <b id="det">1.00</b></div>
+        <div>The point (1, 1) lands at <b id="vout">(1.00, 1.00)</b></div>
+      </div>
+      <label class="relu"><input type="checkbox" id="reluBox"><span>Add a ReLU after the matrix. It sets every negative coordinate to 0, which is the kind of bend that sits between layers.</span></label>
+      <p class="note" id="reluNote"></p>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Attention -->
+<section class="blk" id="attention">
+  <div class="wrap">
+    <div class="prose" style="max-width:44em">
+      <h2>Attention is a table of dot products</h2>
+      <p>To update a token, the model asks which other tokens matter for it. Every token carries a <strong>query</strong> (what it is looking for) and a <strong>key</strong> (what it offers). The dot product of a query and a key scores the match. Softmax then turns the scores into weights that add up to 1, and the token's new vector is a weighted blend of the others.</p>
+      <p>Click a word. Start with <em>it</em>, which should lean on <em>animal</em>.</p>
+    </div>
+    <div class="panel" style="margin-top:28px">
+      <div class="tokrow ui" id="tokRow" role="group" aria-label="Choose a token"></div>
+      <div class="att-grid">
+        <div>
+          <svg id="qkPlane" viewBox="0 0 336 288" role="img" aria-label="Query and key vectors drawn as arrows"></svg>
+          <div class="legend"><span><i style="background:var(--rose)"></i>query of the chosen token</span><span><i style="background:var(--blue)"></i>keys of every token</span></div>
+        </div>
+        <div>
+          <div id="attBars"></div>
+          <div class="sharp ui"><span>Softer</span><input id="sharp" type="range" min="0.3" max="4" step="0.1" value="1.5" aria-label="Sharpness of the softmax"><span>Sharper</span></div>
+        </div>
+      </div>
+      <p class="mix" id="attOut"></p>
+      <div class="heatwrap" id="heat"></div>
+      <p class="note">The vectors here are hand-set in two dimensions so you can read them. A real model learns its query and key matrices, uses many more dimensions, and runs many attention heads at once. The sharpness slider stands in for the scaling factor that keeps dot products from growing too large.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4. Scale -->
+<section class="blk" id="scale">
+  <div class="wrap split">
+    <div class="prose">
+      <h2>Scale is a matrix multiplication budget</h2>
+      <p>Nearly all of a model's parameters sit in weight matrices, and nearly all of its compute is multiplying vectors by them. Change the width and the number of layers to see how the totals grow.</p>
+      <p>Width counts twice. A weight matrix is <em>d × d</em>, so doubling <em>d</em> quadruples the entries. This is also why GPUs matter: they are built to multiply large matrices in parallel.</p>
+      <p class="aside">Rough estimate: each transformer layer holds about 12·d² numbers (4·d² in attention, 8·d² in the feed-forward block). Real models differ in the details and also store embeddings.</p>
+    </div>
+    <div class="panel">
+      <div class="chips ui" id="scalePre">
+        <button type="button" data-d="2" data-l="12">GPT-2 size</button>
+        <button type="button" data-d="5" data-l="32">7B class</button>
+        <button type="button" data-d="7" data-l="80">70B class</button>
+      </div>
+      <div class="srow ui"><label for="dIdx">Width d</label><input id="dIdx" type="range" min="0" max="8" step="1" value="5"><output id="dOut">4096</output></div>
+      <div class="srow ui"><label for="lyr">Layers</label><input id="lyr" type="range" min="4" max="96" step="2" value="32"><output id="lOut">32</output></div>
+      <div class="scale-grid">
+        <div>
+          <div class="stat"><div class="big" id="sParams">6.4 billion<small>parameters, about 12 · layers · d²</small></div></div>
+          <div class="stat"><div class="big" id="sMem">13 GB<small id="sMemNote">to store the weights in 16-bit numbers</small></div></div>
+          <div class="stat"><div class="big" id="sFlops">13 billion<small>operations to produce one token, about 2 per parameter</small></div></div>
+        </div>
+        <div>
+          <div class="ui" style="font-size:13px;color:var(--muted);margin-bottom:6px">One d × d matrix, drawn to scale. Its area is its number of entries.</div>
+          <div class="sqwrap"><div id="sqBox"></div></div>
+          <div class="ui" style="font-size:13px;color:var(--muted);margin:14px 0 4px">Where a layer's numbers live</div>
+          <div class="split-bar"><i style="width:33.3%;background:var(--rose)"></i><i style="width:66.7%;background:var(--teal)"></i></div>
+          <div class="ui" style="font-size:13px;color:var(--muted)">Attention (4d²) and feed-forward (8d²)</div>
+          <div class="ui" style="font-size:13px;color:var(--muted);margin:14px 0 0">Layers, one block each</div>
+          <div class="blocks" id="blocks" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. Low rank -->
+<section class="blk" id="lowrank">
+  <div class="wrap split">
+    <div class="prose">
+      <h2>Big matrices are often secretly small</h2>
+      <p>A matrix of size n × n can be rebuilt from a few "rank 1" pieces, each one a column times a row. Keep the strongest r pieces and you store about r × 2n numbers instead of n². The singular value decomposition finds the best pieces.</p>
+      <p>Slide the rank and watch a 32 × 32 picture come back into focus. Low-rank updates are also the idea behind LoRA, a way to fine-tune a model by training two thin matrices instead of one huge one.</p>
+      <p class="aside" id="loraNote"></p>
+    </div>
+    <div class="panel">
+      <div class="lr-grid">
+        <div><canvas id="lrA" role="img" aria-label="Original 32 by 32 picture"></canvas><div class="lr-cap">Original: 1,024 numbers</div></div>
+        <div><canvas id="lrB" role="img" aria-label="Rebuilt picture using only the strongest components"></canvas><div class="lr-cap" id="lrCap"></div></div>
+      </div>
+      <div class="srow ui" style="grid-template-columns:4.4em 1fr 3em"><label for="rank">Rank r</label><input id="rank" type="range" min="1" max="16" step="1" value="3"><output id="rankOut">3</output></div>
+      <div class="read ui">
+        <div>Numbers stored: <b id="lrNums"></b></div>
+        <div>Picture still missing: <b id="lrErr"></b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Recap -->
+<section class="blk" id="recap">
+  <div class="wrap">
+    <h2>The same few operations, repeated</h2>
+    <dl class="recap">
+      <div><dt>Embeddings</dt><dd>Vectors. Meaning becomes direction and distance, and similarity is a cosine.</dd></div>
+      <div><dt>Layers</dt><dd>Matrix–vector products. Each layer re-mixes every feature into new ones, and a bend between layers keeps the stack from collapsing into a single matrix.</dd></div>
+      <div><dt>Attention</dt><dd>Dot products between queries and keys, a softmax, then a weighted sum of value vectors.</dd></div>
+      <div><dt>Training and serving</dt><dd>Large matrix–matrix multiplications that GPUs run in parallel. Parameter counts and compute follow directly from matrix sizes.</dd></div>
+      <div><dt>Efficient fine-tuning</dt><dd>Low-rank factorization: approximate or update a big matrix with two thin ones.</dd></div>
+    </dl>
+    <p class="fine">These demos are simplified. They use two dimensions instead of thousands, hand-set vectors in the word and attention examples, and parameter estimates that ignore embeddings and architecture variants.</p>
+  </div>
+</section>
+</main>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fmt = v => (Math.abs(v) < 0.005 ? 0 : v).toFixed(2);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ---------- canvas helper ---------- */
+const canvases = [];
+function Cv(el, draw) {
+  const o = { el, w: 0, h: 0, ctx: null };
+  o.resize = () => {
+    const r = el.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    o.w = r.width; o.h = r.height;
+    el.width = Math.max(1, Math.round(r.width * dpr));
+    el.height = Math.max(1, Math.round(r.height * dpr));
+    o.ctx = el.getContext('2d');
+    o.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  o.render = () => { if (o.w > 0) draw(o); };
+  new ResizeObserver(() => { o.resize(); o.render(); }).observe(el);
+  canvases.push(o);
+  o.resize();
+  return o;
+}
+const rerenderAll = () => canvases.forEach(c => c.render());
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', rerenderAll);
+new MutationObserver(rerenderAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+function makeTween(initial, onFrame) {
+  const cur = initial.slice(), tgt = initial.slice();
+  let raf = 0;
+  function step() {
+    let moving = false;
+    for (let i = 0; i < cur.length; i++) {
+      const d = tgt[i] - cur[i];
+      if (Math.abs(d) > 0.0005) { cur[i] += d * 0.1; moving = true; } else cur[i] = tgt[i];
+    }
+    onFrame(cur);
+    raf = moving ? requestAnimationFrame(step) : 0;
+  }
+  return {
+    cur, tgt,
+    set(arr, instant) {
+      for (let i = 0; i < arr.length; i++) tgt[i] = arr[i];
+      if (instant || reduce) { for (let i = 0; i < arr.length; i++) cur[i] = arr[i]; onFrame(cur); return; }
+      if (!raf) raf = requestAnimationFrame(step);
+    }
+  };
+}
+
+function arrow(ctx, x0, y0, x1, y1, color, wd) {
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = wd || 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  if (Math.hypot(x1 - x0, y1 - y0) < 6) return;
+  const ang = Math.atan2(y1 - y0, x1 - x0), hl = 11;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 - hl * Math.cos(ang - 0.4), y1 - hl * Math.sin(ang - 0.4));
+  ctx.lineTo(x1 - hl * Math.cos(ang + 0.4), y1 - hl * Math.sin(ang + 0.4));
+  ctx.closePath(); ctx.fill();
+}
+
+function drawTransform(o, M, opt) {
+  const { ctx, w, h } = o;
+  const R = opt.range, s = Math.min(w, h) / (2 * R), cx = w / 2, cy = h / 2;
+  const P = (x, y) => [cx + x * s, cy - y * s];
+  ctx.clearRect(0, 0, w, h);
+  ctx.lineWidth = 1; ctx.strokeStyle = css('--grid');
+  ctx.beginPath();
+  for (let k = -R; k <= R; k++) {
+    let a = P(k, -R), b = P(k, R); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+    a = P(-R, k); b = P(R, k); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = css('--line'); ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+
+  const a = M[0], b = M[1], c = M[2], d = M[3];
+  const map = (x, y) => {
+    let X = a * x + b * y, Y = c * x + d * y;
+    if (opt.relu) { X = Math.max(0, X); Y = Math.max(0, Y); }
+    return P(X, Y);
+  };
+  const L = 14, S = 140;
+  ctx.strokeStyle = css('--blue'); ctx.globalAlpha = 0.6; ctx.lineWidth = 1.2; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let k = -L; k <= L; k++) {
+    for (let i = 0; i <= S; i++) { const t = -L + 2 * L * i / S, p = map(k, t); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }
+    for (let i = 0; i <= S; i++) { const t = -L + 2 * L * i / S, p = map(t, k); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }
+  }
+  ctx.stroke(); ctx.globalAlpha = 1;
+
+  ctx.beginPath();
+  [[0, 0], [1, 0], [1, 1], [0, 1]].forEach((q, i) => { const p = map(q[0], q[1]); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); });
+  ctx.closePath();
+  ctx.fillStyle = css('--amber'); ctx.globalAlpha = 0.28; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = css('--amber'); ctx.lineWidth = 2; ctx.stroke();
+
+  const o0 = P(0, 0), ih = map(1, 0), jh = map(0, 1);
+  arrow(ctx, o0[0], o0[1], ih[0], ih[1], css('--rose'), 3.5);
+  arrow(ctx, o0[0], o0[1], jh[0], jh[1], css('--teal'), 3.5);
+  if (opt.vec) {
+    const v = map(opt.vec[0], opt.vec[1]);
+    ctx.setLineDash([5, 5]); arrow(ctx, o0[0], o0[1], v[0], v[1], css('--ink'), 2); ctx.setLineDash([]);
+    ctx.fillStyle = css('--ink'); ctx.beginPath(); ctx.arc(v[0], v[1], 4, 0, 6.2832); ctx.fill();
+  }
+}
+
+/* ---------- Hero ---------- */
+(function () {
+  const list = [
+    { n: 'Identity', d: 'Every point stays where it is.', m: [1, 0, 0, 1] },
+    { n: 'Rotate 35°', d: 'Every point turns around the origin.', m: [0.819, -0.574, 0.574, 0.819] },
+    { n: 'Stretch', d: 'One direction grows while another shrinks.', m: [1.7, 0, 0, 0.55] },
+    { n: 'Shear', d: 'Each point slides in proportion to its height.', m: [1, 0.9, 0, 1] },
+    { n: 'Mix', d: 'A blend of the other three, like a learned layer.', m: [1.1, -0.8, 0.6, 0.9] }
+  ];
+  let cv;
+  const cells = [0, 1, 2, 3].map(i => $('#hm' + i));
+  const tw = makeTween([1, 0, 0, 1], cur => { if (cv) cv.render(); cells.forEach((c, i) => c.textContent = fmt(cur[i])); });
+  cv = Cv($('#heroCv'), o => drawTransform(o, tw.cur, { range: 4, vec: [1, 1] }));
+  let hi = 0, timer = null;
+  function go(i) {
+    hi = i; const p = list[i];
+    tw.set(p.m); $('#heroName').textContent = p.n; $('#heroDesc').textContent = p.d;
+  }
+  function start() { if (reduce || timer) return; timer = setInterval(() => go((hi + 1) % list.length), 3200); }
+  function stop() { clearInterval(timer); timer = null; }
+  new IntersectionObserver(es => { es[0].isIntersecting ? start() : stop(); }).observe($('#heroCv'));
+  $('#heroNext').addEventListener('click', () => { stop(); go((hi + 1) % list.length); start(); });
+  go(0);
+})();
+
+/* ---------- 1. Word vectors ---------- */
+(function () {
+  const svg = $('#embSvg');
+  const X = x => 300 + x * 48, Y = y => 220 - y * 40;
+  const words = [
+    ['man', -2.0, 0.8, 'p'], ['woman', 2.0, 0.8, 'p'], ['king', -2.0, 3.6, 'p'], ['queen', 2.2, 3.5, 'p'],
+    ['prince', -2.0, 2.2, 'p'], ['princess', 2.1, 2.2, 'p'],
+    ['cat', -4.0, -3.2, 'a'], ['kitten', -4.7, -2.2, 'a'], ['dog', -2.6, -3.8, 'a'], ['puppy', -3.2, -2.8, 'a'],
+    ['apple', 3.2, -3.4, 'f'], ['pear', 4.4, -2.4, 'f'], ['banana', 2.4, -4.0, 'f']
+  ];
+  const col = { p: 'var(--rose)', a: 'var(--teal)', f: 'var(--amber)' };
+  let g = '';
+  for (let k = -6; k <= 6; k += 2) g += `<line x1="${X(k)}" y1="0" x2="${X(k)}" y2="440" class="egrid"/>`;
+  for (let k = -4; k <= 4; k += 2) g += `<line x1="0" y1="${Y(k)}" x2="600" y2="${Y(k)}" class="egrid"/>`;
+  g += `<line x1="${X(0)}" y1="0" x2="${X(0)}" y2="440" class="eaxis"/><line x1="0" y1="${Y(0)}" x2="600" y2="${Y(0)}" class="eaxis"/>`;
+  words.forEach(w => {
+    g += `<circle cx="${X(w[1])}" cy="${Y(w[2])}" r="5.5" fill="${col[w[3]]}"/>`;
+    g += `<text x="${X(w[1]) + 9}" y="${Y(w[2]) - 8}" class="wlab">${w[0]}</text>`;
+  });
+  g += `<polyline id="trail" points=""/><circle id="ring" r="10" cx="-50" cy="-50"/>`;
+  g += `<line id="pline" x1="${X(0)}" y1="${Y(0)}" x2="${X(0)}" y2="${Y(0)}"/>`;
+  g += `<g id="probe" tabindex="0" role="slider" aria-label="Probe vector. Use arrow keys to move it."><circle id="phit" r="28" fill="transparent"/><circle id="pdot" r="9"/></g>`;
+  svg.innerHTML = g;
+
+  const pline = $('#pline'), pdot = $('#pdot'), phit = $('#phit'), ring = $('#ring'), trailEl = $('#trail'), probe = $('#probe');
+  const pos = { x: -3.6, y: -3.4 };
+  let trail = [], run = 0;
+
+  function update() {
+    const px = X(pos.x), py = Y(pos.y);
+    pline.setAttribute('x2', px); pline.setAttribute('y2', py);
+    [pdot, phit].forEach(c => { c.setAttribute('cx', px); c.setAttribute('cy', py); });
+    trailEl.setAttribute('points', trail.map(t => X(t[0]) + ',' + Y(t[1])).join(' '));
+    const na = Math.hypot(pos.x, pos.y) || 1e-9;
+    const rows = words.map(w => {
+      const dot = pos.x * w[1] + pos.y * w[2], nb = Math.hypot(w[1], w[2]);
+      return { w: w[0], x: w[1], y: w[2], dot, nb, cos: dot / (na * nb) };
+    }).sort((a, b) => b.cos - a.cos);
+    const best = rows[0];
+    ring.setAttribute('cx', X(best.x)); ring.setAttribute('cy', Y(best.y));
+    $('#cosList').innerHTML = rows.slice(0, 5).map((r, i) =>
+      `<div class="cos-row ui${i === 0 ? ' best' : ''}"><span>${r.w}</span><span class="track"><i style="width:${Math.max(0, r.cos) * 100}%"></i></span><b>${r.cos.toFixed(2)}</b></div>`).join('');
+    $('#cosFormula').textContent =
+      `Closest: ${best.w}. cos θ = (a · b) / (‖a‖ ‖b‖) = ${best.dot.toFixed(2)} / (${na.toFixed(2)} × ${best.nb.toFixed(2)}) = ${best.cos.toFixed(2)}`;
+  }
+
+  function toData(e) {
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return { x: clamp((p.x - 300) / 48, -5.8, 5.8), y: clamp((220 - p.y) / 40, -4.8, 4.8) };
+  }
+  function cancel() { run++; trail = []; $('#anNote').textContent = ''; }
+  let dragging = false;
+  probe.addEventListener('pointerdown', e => { dragging = true; cancel(); probe.setPointerCapture(e.pointerId); e.preventDefault(); });
+  probe.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+  probe.addEventListener('pointermove', e => { if (!dragging) return; const d = toData(e); pos.x = d.x; pos.y = d.y; update(); });
+  const endDrag = () => { dragging = false; };
+  probe.addEventListener('pointerup', endDrag); probe.addEventListener('pointercancel', endDrag);
+  probe.addEventListener('keydown', e => {
+    const k = { ArrowLeft: [-0.25, 0], ArrowRight: [0.25, 0], ArrowUp: [0, 0.25], ArrowDown: [0, -0.25] }[e.key];
+    if (!k) return; e.preventDefault(); cancel();
+    pos.x = clamp(pos.x + k[0], -5.8, 5.8); pos.y = clamp(pos.y + k[1], -4.8, 4.8); update();
+  });
+
+  function moveTo(x, y, ms, token) {
+    return new Promise(res => {
+      if (reduce) { pos.x = x; pos.y = y; update(); res(); return; }
+      const x0 = pos.x, y0 = pos.y, t0 = performance.now();
+      (function f(now) {
+        if (token !== run) { res(); return; }
+        const t = clamp((now - t0) / ms, 0, 1), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        pos.x = x0 + (x - x0) * e; pos.y = y0 + (y - y0) * e; update();
+        t < 1 ? requestAnimationFrame(f) : res();
+      })(t0);
+    });
+  }
+  document.querySelectorAll('[data-pos]').forEach(b => b.addEventListener('click', async () => {
+    cancel(); const token = run; const [x, y] = b.dataset.pos.split(',').map(Number);
+    await moveTo(x, y, 600, token);
+  }));
+  $('#anBtn').addEventListener('click', async () => {
+    cancel(); const token = run, note = $('#anNote');
+    const step = async (x, y, msg) => {
+      if (token !== run) return false;
+      note.textContent = msg; await moveTo(x, y, 900, token);
+      if (token !== run) return false;
+      trail.push([pos.x, pos.y]); update(); await sleep(700);
+      return token === run;
+    };
+    trail = [[0, 0]]; update();
+    if (!await step(-2.0, 3.6, 'Start at the vector for king.')) return;
+    if (!await step(0, 2.8, 'Subtract man. What is left points mostly toward "royalty".')) return;
+    if (!await step(2.0, 3.6, 'Add woman. The result lands almost on queen.')) return;
+    note.textContent = 'king − man + woman ≈ queen. In a real model it lands near queen, not exactly on it.';
+  });
+  update();
+})();
+
+/* ---------- 2. Layers ---------- */
+(function () {
+  const keys = ['a', 'b', 'c', 'd'];
+  const sl = {}, ou = {};
+  keys.forEach(k => { sl[k] = $('#s' + k); ou[k] = $('#o' + k); });
+  const state = { relu: false };
+  let cv;
+  const tw = makeTween([1, 0, 0, 1], cur => {
+    if (cv) cv.render();
+    keys.forEach((k, i) => { ou[k].textContent = fmt(cur[i]); if (document.activeElement !== sl[k]) sl[k].value = cur[i]; });
+    $('#det').textContent = fmt(cur[0] * cur[3] - cur[1] * cur[2]);
+    let x = cur[0] + cur[1], y = cur[2] + cur[3];
+    if (state.relu) { x = Math.max(0, x); y = Math.max(0, y); }
+    $('#vout').textContent = `(${fmt(x)}, ${fmt(y)})`;
+  });
+  cv = Cv($('#layCv'), o => drawTransform(o, tw.cur, { range: 4, relu: state.relu, vec: [1, 1] }));
+
+  const c40 = Math.cos(40 * Math.PI / 180), s40 = Math.sin(40 * Math.PI / 180);
+  const pre = [
+    ['Identity', [1, 0, 0, 1], 'Nothing moves.'],
+    ['Rotate 40°', [c40, -s40, s40, c40], 'Lengths stay the same and directions turn. Rotary position embeddings, used in many language models, apply small rotations like this to pairs of numbers.'],
+    ['Stretch', [1.7, 0, 0, 0.55], 'Directions get scaled by different amounts, so some features count for more than others.'],
+    ['Shear', [1, 0.9, 0, 1], 'Each output coordinate borrows from the other input coordinate. This is mixing.'],
+    ['Squash to a line', [0.5, 0.5, 0.5, 0.5], 'The determinant is 0: the whole plane collapses onto a line and information is lost. Low-rank matrices behave this way, which comes back in the last section.']
+  ];
+  const box = $('#layPre');
+  pre.forEach((p, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = p[0]; b.setAttribute('aria-pressed', i === 0);
+    b.addEventListener('click', () => {
+      [...box.children].forEach(c => c.setAttribute('aria-pressed', c === b));
+      tw.set(p[1]); $('#layDesc').textContent = p[2];
+    });
+    box.appendChild(b);
+  });
+  keys.forEach(k => sl[k].addEventListener('input', () => {
+    tw.set(keys.map(q => parseFloat(sl[q].value)), true);
+    [...box.children].forEach(c => c.setAttribute('aria-pressed', false));
+    $('#layDesc').textContent = 'Your own matrix. A trained model learns values like these from data.';
+  }));
+  $('#reluBox').addEventListener('change', e => {
+    state.relu = e.target.checked; tw.set(tw.tgt.slice(), true);
+    $('#reluNote').textContent = state.relu
+      ? 'Everything left of the y-axis or below the x-axis is flattened onto it, so the plane folds. Without a bend like this, any stack of matrices could be merged into a single matrix.'
+      : '';
+  });
+  $('#layDesc').textContent = 'Pick a preset or drag the sliders.';
+  tw.set([1, 0, 0, 1], true);
+})();
+
+/* ---------- 3. Attention ---------- */
+(function () {
+  const T = ['The', 'animal', 'didn’t', 'cross', 'the', 'street', 'because', 'it', 'was', 'tired'];
+  const K = [[.1, 0], [1.2, .3], [0, .5], [.1, .7], [.1, 0], [.6, -.5], [0, .2], [.4, .1], [0, .5], [.2, .9]];
+  const Q = [[1, 0], [.4, 1], [.8, .6], [1, -.2], [.4, -1], [.2, .8], [.3, 1], [1.6, .3], [1.2, .3], [1, .2]];
+  let sel = 7, sharp = 1.5;
+  const weights = i => {
+    const l = K.map(k => sharp * (Q[i][0] * k[0] + Q[i][1] * k[1]));
+    const m = Math.max(...l), e = l.map(v => Math.exp(v - m)), s = e.reduce((a, b) => a + b, 0);
+    return e.map(v => v / s);
+  };
+  const X = x => (x + 0.8) * 120, Y = y => (1.2 - y) * 120;
+
+  function render() {
+    const w = weights(sel), wmax = Math.max(...w);
+    $('#tokRow').innerHTML = T.map((t, i) => `<button type="button" data-tok="${i}" aria-pressed="${i === sel}">${t}</button>`).join('');
+
+    const order = w.map((_, i) => i).sort((a, b) => w[b] - w[a]), top = new Set(order.slice(0, 4));
+    let s = `<line x1="${X(0)}" y1="0" x2="${X(0)}" y2="288" class="pax"/><line x1="0" y1="${Y(0)}" x2="336" y2="${Y(0)}" class="pax"/>`;
+    K.forEach((k, j) => {
+      const op = (0.2 + 0.8 * w[j] / wmax).toFixed(2);
+      s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(k[0])}" y2="${Y(k[1])}" class="kar" style="opacity:${op}"/><circle cx="${X(k[0])}" cy="${Y(k[1])}" r="4" class="kdot" style="opacity:${op}"/>`;
+    });
+    K.forEach((k, j) => { if (top.has(j)) s += `<text x="${X(k[0]) + 7}" y="${Y(k[1]) + 14}" class="klab">${T[j]}</text>`; });
+    const q = Q[sel], qx = X(q[0]), qy = Y(q[1]), right = qx > 230;
+    s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${qx}" y2="${qy}" class="qar"/><circle cx="${qx}" cy="${qy}" r="6" class="qdot"/>`;
+    s += `<text x="${right ? qx - 9 : qx + 9}" y="${qy - 9}" text-anchor="${right ? 'end' : 'start'}" class="qlab">query: ${T[sel]}</text>`;
+    $('#qkPlane').innerHTML = s;
+
+    $('#attBars').innerHTML = T.map((t, j) =>
+      `<div class="abar ui${j === order[0] ? ' top1' : ''}"><span>${t}</span><span class="track"><i style="width:${(w[j] * 100).toFixed(1)}%"></i></span><b>${Math.round(w[j] * 100)}%</b></div>`).join('');
+
+    const parts = order.filter(j => w[j] >= 0.06).map(j => `${Math.round(w[j] * 100)}% of ${T[j]}`);
+    $('#attOut').innerHTML = `The new vector for <strong>${T[sel]}</strong> is a blend of the value vectors: ${parts.join(', ')}, plus small amounts from the rest.`;
+
+    let h = '<table class="heat"><thead><tr><th></th>' + T.map(t => `<th scope="col"><span>${t}</span></th>`).join('') + '</tr></thead><tbody>';
+    T.forEach((t, i) => {
+      const wi = weights(i);
+      h += `<tr class="${i === sel ? 'sel' : ''}"><th scope="row"><button type="button" data-tok="${i}">${t}</button></th>` +
+        wi.map(v => `<td style="--w:${v.toFixed(3)}"></td>`).join('') + '</tr>';
+    });
+    $('#heat').innerHTML = h + '</tbody></table>';
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-tok]');
+    if (b) { sel = +b.dataset.tok; render(); }
+  });
+  $('#sharp').addEventListener('input', e => { sharp = +e.target.value; render(); });
+  render();
+})();
+
+/* ---------- 4. Scale ---------- */
+(function () {
+  const dS = [256, 512, 768, 1024, 2048, 4096, 5120, 8192, 12288];
+  const dI = $('#dIdx'), lI = $('#lyr');
+  const human = n => {
+    if (n >= 1e12) return (n / 1e12).toFixed(1) + ' trillion';
+    if (n >= 1e9) return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + ' billion';
+    if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e8 ? 0 : 1) + ' million';
+    return Math.round(n / 1e3) + ' thousand';
+  };
+  function render() {
+    const d = dS[+dI.value], L = +lI.value, P = 12 * L * d * d;
+    $('#dOut').textContent = d.toLocaleString('en-US'); $('#lOut').textContent = L;
+    $('#sParams').innerHTML = `${human(P)}<small>parameters, about 12 · layers · d²</small>`;
+    const gb = P * 2 / 1e9, gpus = Math.ceil(gb / 80);
+    $('#sMem').innerHTML = `${gb >= 100 ? Math.round(gb) : gb.toFixed(1)} GB<small>to store the weights in 16-bit numbers, about ${gpus} GPU${gpus > 1 ? 's' : ''} with 80 GB each</small>`;
+    $('#sFlops').innerHTML = `${human(2 * P)}<small>operations to produce one token, about 2 per parameter</small>`;
+    const side = Math.max(4, 190 * d / 12288);
+    const sq = $('#sqBox'); sq.style.width = side + 'px'; sq.style.height = side + 'px';
+    $('#blocks').innerHTML = '<i></i>'.repeat(L);
+  }
+  dI.addEventListener('input', render); lI.addEventListener('input', render);
+  document.querySelectorAll('#scalePre button').forEach(b => b.addEventListener('click', () => {
+    dI.value = b.dataset.d; lI.value = b.dataset.l; render();
+  }));
+  render();
+})();
+
+/* ---------- 5. Low rank ---------- */
+(function () {
+  const N = 32, R = 16;
+  const pat = (i, j) => {
+    const x = (j - 15.5) / 15.5, y = (15.5 - i) / 15.5, r = Math.hypot(x, y);
+    let v = Math.exp(-Math.pow((r - 0.88) / 0.07, 2));
+    v += Math.exp(-(Math.pow(x + 0.35, 2) + Math.pow(y - 0.3, 2)) / 0.012);
+    v += Math.exp(-(Math.pow(x - 0.35, 2) + Math.pow(y - 0.3, 2)) / 0.012);
+    if (y < -0.1) v += Math.exp(-Math.pow((Math.hypot(x, y + 0.05) - 0.5) / 0.07, 2));
+    return Math.min(1, v);
+  };
+  const A = new Float64Array(N * N);
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) A[i * N + j] = pat(i, j);
+  const normA = Math.hypot(...A);
+
+  // Power iteration with deflation gives the top singular triplets.
+  const comps = [], Rm = Float64Array.from(A);
+  for (let k = 0; k < R; k++) {
+    let v = new Float64Array(N).map((_, i) => Math.sin(i * 1.7 + k) + 0.5);
+    for (let it = 0; it < 200; it++) {
+      const u = new Float64Array(N), nv = new Float64Array(N);
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) u[i] += Rm[i * N + j] * v[j];
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) nv[j] += Rm[i * N + j] * u[i];
+      const n = Math.hypot(...nv) || 1;
+      v = nv.map(x => x / n);
+    }
+    const u = new Float64Array(N);
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) u[i] += Rm[i * N + j] * v[j];
+    const s = Math.hypot(...u) || 1;
+    for (let i = 0; i < N; i++) u[i] /= s;
+    comps.push({ s, u, v });
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) Rm[i * N + j] -= s * u[i] * v[j];
+  }
+  const recon = r => {
+    const M = new Float64Array(N * N);
+    for (let k = 0; k < r; k++) { const c = comps[k]; for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) M[i * N + j] += c.s * c.u[i] * c.v[j]; }
+    return M;
+  };
+  const rgb = h => { h = h.replace('#', ''); return [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16)); };
+  const paint = (o, M) => {
+    const lo = rgb(css('--panel')), hi = rgb(css('--teal')), cw = o.w / N, ch = o.h / N;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const t = clamp(M[i * N + j], 0, 1);
+      o.ctx.fillStyle = `rgb(${lo.map((c, q) => Math.round(c + (hi[q] - c) * t)).join(',')})`;
+      o.ctx.fillRect(j * cw, i * ch, cw + 0.5, ch + 0.5);
+    }
+  };
+  let r = +$('#rank').value;
+  const cvA = Cv($('#lrA'), o => paint(o, A));
+  const cvB = Cv($('#lrB'), o => paint(o, recon(r)));
+  function update() {
+    r = +$('#rank').value; $('#rankOut').textContent = r;
+    const M = recon(r); let e = 0;
+    for (let i = 0; i < N * N; i++) e += (A[i] - M[i]) ** 2;
+    $('#lrCap').textContent = `Rebuilt from ${r} piece${r > 1 ? 's' : ''}`;
+    $('#lrNums').textContent = `${r} × 64 = ${(r * 64).toLocaleString('en-US')} instead of 1,024`;
+    $('#lrErr').textContent = (Math.sqrt(e) / normA * 100).toFixed(1) + '% of the original';
+    $('#loraNote').textContent = `For a 4,096 × 4,096 weight matrix, a rank-${r} update trains 2·${r}·4,096 numbers, which is ${(200 * r / 4096).toFixed(2)}% of the matrix's entries.`;
+    cvB.render();
+  }
+  $('#rank').addEventListener('input', update);
+  update();
+})();
+})();
+</script>
+</body>
+</html>
