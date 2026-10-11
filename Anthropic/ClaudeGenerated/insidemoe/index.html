@@ -1,0 +1,585 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Inside Mixture of Experts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one long scroll of five live demos, each with a short caption above and controls beside it. */
+:root{
+  --bg:#f2f5f9; --surface:#ffffff; --surface2:#e9eef5; --fg:#122033; --muted:#566a80; --line:#d5dde8;
+  --route:#d9480f; --route-soft:#fde3d3;
+  --expert:#0b7a75; --expert-soft:#d2efec;
+  --shared:#6741c6; --shared-soft:#e5dcfa;
+  --good:#2b8a3e; --bad:#c92a2a;
+  --f-display:"Familjen Grotesk","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1219; --surface:#131b25; --surface2:#1b2633; --fg:#e4ecf4; --muted:#93a4b7; --line:#273445;
+  --route:#ff8a45; --route-soft:#3b2315;
+  --expert:#33d1c4; --expert-soft:#0f3a38;
+  --shared:#a78bfa; --shared-soft:#2c2350;
+  --good:#51cf66; --bad:#ff6b6b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c1219; --surface:#131b25; --surface2:#1b2633; --fg:#e4ecf4; --muted:#93a4b7; --line:#273445;
+  --route:#ff8a45; --route-soft:#3b2315;
+  --expert:#33d1c4; --expert-soft:#0f3a38;
+  --shared:#a78bfa; --shared-soft:#2c2350;
+  --good:#51cf66; --bad:#ff6b6b; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.6;padding-inline:16px;padding-block:0 72px}
+.wrap{max-width:1040px;margin-inline:auto}
+h1,h2,h3{font-family:var(--f-display);line-height:1.1;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(2.4rem,6.4vw,4.4rem);font-weight:700}
+h2{font-size:clamp(1.6rem,3.6vw,2.3rem);font-weight:600}
+h3{font-size:1.1rem;font-weight:600}
+p{margin:0;max-width:66ch}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+.eyebrow{font-family:var(--f-mono);font-size:.76rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+a{color:var(--route)}
+:focus-visible{outline:2px solid var(--route);outline-offset:2px;border-radius:4px}
+
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);margin-inline:-16px;padding:10px 16px;border-bottom:1px solid var(--line)}
+nav .in{max-width:1040px;margin-inline:auto;display:flex;gap:6px 18px;flex-wrap:wrap;align-items:center;font-size:.85rem}
+nav b{font-family:var(--f-display);font-size:1rem;margin-right:auto}
+nav a{color:var(--muted);text-decoration:none}
+nav a:hover{color:var(--fg)}
+
+header.hero{padding-block:44px 22px;display:grid;gap:18px}
+header.hero p.lead{font-size:1.15rem;color:var(--muted)}
+section{padding-block:56px 8px;display:grid;gap:18px}
+section>p{color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.controls{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-bottom:12px}
+.ctl{display:flex;gap:8px;align-items:center;font-size:.85rem;color:var(--muted);flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{background:var(--surface);color:var(--fg);border:0;border-right:1px solid var(--line);padding:5px 12px;font:500 .85rem var(--f-mono);cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
+.btn{background:var(--route);color:#fff;border:0;border-radius:7px;padding:7px 16px;font:600 .88rem var(--f-body);cursor:pointer}
+:root[data-theme="dark"] .btn{color:#1a0c02}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn{color:#1a0c02}}
+.btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.btn:hover{filter:brightness(1.08)}
+input[type=range]{accent-color:var(--route);width:150px}
+.legend{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+
+/* hero canvas */
+#hero{display:block;width:100%;height:380px}
+@media (max-width:560px){#hero{height:330px}}
+
+/* walkthrough */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--surface2);border:1px solid var(--line);color:var(--fg);font:500 .92rem var(--f-mono);padding:6px 12px;border-radius:7px;cursor:pointer;transition:transform .15s,background .2s}
+.chip:hover{transform:translateY(-2px)}
+.chip[aria-pressed="true"]{background:var(--route);border-color:var(--route);color:#fff}
+:root[data-theme="dark"] .chip[aria-pressed="true"]{color:#1a0c02}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .chip[aria-pressed="true"]{color:#1a0c02}}
+.stages{display:grid;gap:10px;margin-top:14px}
+.stage{display:grid;grid-template-columns:150px 1fr;gap:14px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:8px;opacity:.2;transform:translateY(8px);transition:opacity .5s,transform .5s}
+.stage.on{opacity:1;transform:none}
+@media (max-width:620px){.stage{grid-template-columns:1fr;gap:8px}}
+.stage .t{font-size:.85rem;color:var(--muted)}
+.stage .t b{display:block;font-family:var(--f-display);font-size:1rem;color:var(--fg)}
+.vec{display:grid;grid-template-columns:repeat(16,1fr);gap:3px}
+.vec span{height:26px;border-radius:3px;background:var(--muted);opacity:0;transition:opacity .5s}
+.bars{display:grid;gap:5px}
+.brow{display:grid;grid-template-columns:34px 1fr 56px;gap:8px;align-items:center;font:.8rem var(--f-mono)}
+.brow .trk{height:14px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.brow .fil{height:100%;width:0;background:var(--muted);transition:width .7s cubic-bezier(.2,.8,.2,1),background .4s,opacity .4s}
+.brow.pick .fil{background:var(--route)}
+.brow.skip{opacity:.3}
+.brow .v{text-align:right;color:var(--muted)}
+.exps{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.exp{border:1px solid var(--line);border-radius:6px;padding:8px 2px;text-align:center;font:.74rem var(--f-mono);color:var(--muted);transition:all .5s}
+.exp.hot{background:var(--expert);border-color:var(--expert);color:#fff;animation:pulse 1.2s ease-in-out infinite}
+:root[data-theme="dark"] .exp.hot{color:#04201e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .exp.hot{color:#04201e}}
+.exp small{display:block;font-size:.62rem;opacity:.8}
+@keyframes pulse{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--expert) 25%,transparent)}}
+.mixrow{display:grid;gap:6px;font:.78rem var(--f-mono);color:var(--muted)}
+.mixrow .line{display:grid;grid-template-columns:78px 1fr;gap:10px;align-items:center}
+.mixrow .vec span{height:18px;opacity:1}
+.formula{font:.9rem var(--f-mono);color:var(--fg);margin-top:8px;overflow-wrap:anywhere}
+.stepper{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.note{font-size:.88rem;color:var(--muted);margin-top:10px}
+
+/* calculator */
+.calc{display:grid;grid-template-columns:1.1fr 1fr;gap:22px}
+@media (max-width:760px){.calc{grid-template-columns:1fr}}
+.cells{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+.cell{aspect-ratio:1.5;border-radius:5px;background:var(--surface2);border:1px solid var(--line);transition:background .35s,transform .35s,box-shadow .35s}
+.cell.on{background:var(--expert);border-color:var(--expert);transform:scale(1.07);box-shadow:0 0 14px color-mix(in srgb,var(--expert) 55%,transparent)}
+.cell.sh{background:var(--shared)}
+.meter{display:grid;gap:12px;align-content:start}
+.meter .row{display:grid;gap:4px}
+.meter .lab{display:flex;justify-content:space-between;font-size:.85rem;color:var(--muted);gap:8px}
+.meter .lab b{color:var(--fg);font-family:var(--f-mono);font-weight:500}
+.track{height:18px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.track i{display:block;height:100%;border-radius:4px;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.bigstat{font-family:var(--f-display);font-size:2.4rem;font-weight:700;color:var(--route);line-height:1}
+
+/* balancing */
+.lb{display:flex;align-items:flex-end;gap:10px;height:200px;padding:0 4px;border-bottom:1px solid var(--line);position:relative}
+.lb .col{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;min-width:0}
+.lb .bar{width:100%;background:var(--expert);border-radius:4px 4px 0 0;transition:height .18s linear,background .3s;min-height:2px}
+.lb .col.hot .bar{background:var(--bad)}
+.lb .ideal{position:absolute;left:0;right:0;border-top:1.5px dashed var(--muted);pointer-events:none}
+.lb .ideal span{position:absolute;right:0;top:-20px;font:.7rem var(--f-mono);color:var(--muted)}
+.lblabels{display:flex;gap:10px;padding:4px 4px 0;font:.74rem var(--f-mono);color:var(--muted)}
+.lblabels span{flex:1;text-align:center}
+.status{display:flex;gap:10px 28px;flex-wrap:wrap;margin-top:12px;font-size:.9rem}
+.status b{font-family:var(--f-mono);font-weight:500}
+.switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-size:.9rem;color:var(--fg)}
+.switch input{position:absolute;opacity:0}
+.switch .tg{width:42px;height:24px;border-radius:12px;background:var(--surface2);border:1px solid var(--line);position:relative;transition:background .25s}
+.switch .tg::after{content:"";position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:var(--muted);transition:transform .25s,background .25s}
+.switch input:checked+.tg{background:var(--expert-soft);border-color:var(--expert)}
+.switch input:checked+.tg::after{transform:translateX(18px);background:var(--expert)}
+.switch input:focus-visible+.tg{outline:2px solid var(--route);outline-offset:2px}
+
+/* comparison */
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:780px;font-size:.88rem}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font:500 .72rem var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--surface2);position:sticky;top:0}
+tbody tr{cursor:pointer;transition:background .2s}
+tbody tr:hover{background:var(--surface2)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr.selA{box-shadow:inset 4px 0 0 var(--route);background:var(--route-soft)}
+tbody tr.selB{box-shadow:inset 4px 0 0 var(--expert);background:var(--expert-soft)}
+td.nm b{display:block;font-family:var(--f-display);font-size:1rem}
+td.nm span{color:var(--muted);font-size:.78rem}
+td.num{font-family:var(--f-mono);white-space:nowrap}
+.sz{position:relative;height:16px;min-width:200px}
+.sz .tot,.sz .act{position:absolute;left:0;top:0;height:100%;border-radius:3px;transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.sz .tot{background:var(--surface2);border:1px solid var(--line)}
+.sz .act{background:var(--route)}
+.sz .tag{position:absolute;top:0;line-height:16px;font:.72rem var(--f-mono);color:var(--muted);transition:left .7s cubic-bezier(.2,.8,.2,1);padding-left:6px;white-space:nowrap}
+.dense{color:var(--muted)}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:700px){.vs{grid-template-columns:1fr}}
+.card{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:16px;min-width:0;display:grid;gap:10px;align-content:start}
+.card.A{border-top:4px solid var(--route)}
+.card.B{border-top:4px solid var(--expert)}
+.card dl{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;margin:0;font-size:.86rem}
+.card dt{color:var(--muted)}
+.card dd{margin:0;font-family:var(--f-mono);font-size:.82rem;overflow-wrap:anywhere}
+.dots{display:flex;flex-wrap:wrap;gap:3px;padding:10px;background:var(--surface2);border-radius:8px;max-height:156px;overflow:hidden}
+.dots i{width:9px;height:9px;border-radius:2px;background:var(--line);transition:background .3s,transform .3s}
+.dots i.on{background:var(--route);transform:scale(1.35)}
+.card.B .dots i.on{background:var(--expert)}
+.dots i.sh{background:var(--shared)}
+.cap{font-size:.78rem;color:var(--muted)}
+
+footer{padding-top:48px;font-size:.84rem;color:var(--muted);max-width:70ch}
+.cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.cols3 .panel p{font-size:.92rem;color:var(--muted);margin-top:6px}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+
+<nav><div class="in"><b>Inside Mixture of Experts</b>
+  <a href="#route">Routing</a><a href="#token">One token</a><a href="#size">Cost</a><a href="#balance">Balance</a><a href="#compare">Models</a></div></nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <span class="eyebrow">How sparse LLMs work</span>
+  <h1>A big brain that only wakes part of itself up.</h1>
+  <p class="lead">A Mixture of Experts (MoE) model splits each feed-forward block into many small expert networks. A tiny router picks a few experts for every token, so the model holds hundreds of billions of parameters but only uses a fraction of them per word.</p>
+  <div class="panel" style="padding:12px">
+    <div class="controls">
+      <div class="ctl">Experts <span class="seg" id="hE"></span></div>
+      <div class="ctl">Top-k <span class="seg" id="hK"></span></div>
+      <label class="switch"><input type="checkbox" id="hShared"><span class="tg"></span>Shared expert</label>
+      <button class="btn ghost" id="hPause" type="button">Pause</button>
+    </div>
+    <canvas id="hero" role="img" aria-label="Animation of tokens passing through a router that selects a few experts, whose outputs are summed"></canvas>
+    <div class="legend"><span><i style="background:var(--route)"></i>token and router weight</span><span><i style="background:var(--expert)"></i>routed expert</span><span><i style="background:var(--shared)"></i>shared expert (always on)</span></div>
+  </div>
+</header>
+
+<section id="route">
+  <h2>Where the experts live</h2>
+  <p>A transformer layer has attention followed by a feed-forward network (FFN). In an MoE layer, that single FFN is replaced by many parallel FFNs, the experts. Attention stays dense and shared by every token.</p>
+  <div class="cols3">
+    <div class="panel"><h3>1. Router scores</h3><p>A small linear layer turns the token's hidden state into one score per expert.</p></div>
+    <div class="panel"><h3>2. Top-k selection</h3><p>Only the k highest-scoring experts run. The rest are skipped, so they cost no compute for that token.</p></div>
+    <div class="panel"><h3>3. Weighted sum</h3><p>The chosen experts' outputs are blended using the router's weights and passed to the next layer.</p></div>
+  </div>
+</section>
+
+<section id="token">
+  <h2>Follow one token</h2>
+  <p>Pick a token and step through a Mixtral-style layer: 8 experts, top-2. Scores here are illustrative and fixed per token, so the same token always routes the same way.</p>
+  <div class="panel">
+    <div class="chips" id="tokChips" role="group" aria-label="Choose a token"></div>
+    <div class="stages" id="stages">
+      <div class="stage" data-s="0"><div class="t"><b>Hidden state x</b>Output of attention for this token</div><div class="vec" id="vx"></div></div>
+      <div class="stage" data-s="1"><div class="t"><b>Router</b><span id="rtSub">Score for each expert</span></div><div class="bars" id="rbars"></div></div>
+      <div class="stage" data-s="2"><div class="t"><b>Experts</b>Top-2 run, 6 stay idle</div><div class="exps" id="exps"></div></div>
+      <div class="stage" data-s="3"><div class="t"><b>Gate weights</b>Softmax over the two winners</div><div class="formula" id="gates"></div></div>
+      <div class="stage" data-s="4"><div class="t"><b>Mixed output y</b>Weighted sum of two experts</div>
+        <div><div class="mixrow" id="mix"></div><div class="formula" id="yform"></div></div></div>
+    </div>
+    <div class="stepper">
+      <button class="btn" id="play" type="button">Play</button>
+      <button class="btn ghost" id="prev" type="button">Back</button>
+      <button class="btn ghost" id="next" type="button">Next step</button>
+      <span class="cap" id="stepLab">Step 1 of 5</span>
+    </div>
+    <p class="note">Studies of Mixtral found experts lean toward syntax and token types more than neat topics like "math" or "French", so do not expect one expert per subject.</p>
+  </div>
+</section>
+
+<section id="size">
+  <h2>Big on disk, light on compute</h2>
+  <p>Each token pays for the shared layers plus k experts. Memory still has to hold every expert, because any token might need any of them. This sketch uses Mixtral-shaped numbers: 1.6B shared parameters and 5.64B per expert.</p>
+  <div class="panel calc">
+    <div>
+      <div class="controls">
+        <div class="ctl">Experts <span class="seg" id="cE"></span></div>
+        <div class="ctl">Top-k <span class="seg" id="cK"></span></div>
+      </div>
+      <div class="cells" id="cells" aria-hidden="true"></div>
+      <p class="cap" style="margin-top:10px">Lit cells are the experts this token uses. Press the button to send another token.</p>
+      <button class="btn ghost" id="cNew" type="button" style="margin-top:8px">Send another token</button>
+    </div>
+    <div class="meter">
+      <div><div class="bigstat" id="cPct">28%</div><div class="cap">of parameters active per token</div></div>
+      <div class="row"><div class="lab"><span>Total parameters (stored)</span><b id="cTot"></b></div><div class="track"><i id="bTot" style="background:var(--muted)"></i></div></div>
+      <div class="row"><div class="lab"><span>Active parameters (computed)</span><b id="cAct"></b></div><div class="track"><i id="bAct" style="background:var(--route)"></i></div></div>
+      <div class="row"><div class="lab"><span>Weights in memory, 16-bit</span><b id="cMem"></b></div></div>
+      <div class="row"><div class="lab"><span>Compute per token vs dense, same total size</span><b id="cSave"></b></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="balance">
+  <h2>The failure mode: rich-get-richer routing</h2>
+  <p>Experts that get more tokens train faster, look better to the router, and win even more tokens. Left alone, a few experts take over and the rest are wasted. Training adds a balancing pressure to prevent this. Switch it off and watch.</p>
+  <div class="panel">
+    <div class="controls">
+      <label class="switch"><input type="checkbox" id="lbOn" checked><span class="tg"></span>Load balancing</label>
+      <button class="btn ghost" id="lbShift" type="button">Topic shift</button>
+      <button class="btn ghost" id="lbReset" type="button">Reset</button>
+    </div>
+    <div class="lb" id="lb"><div class="ideal" id="lbIdeal"><span>fair share</span></div></div>
+    <div class="lblabels" id="lbLabels"></div>
+    <div class="status"><span>Busiest expert: <b id="lbMax">1.0x</b> fair share</span><span>Idle experts: <b id="lbIdle">0</b> of 8</span><span id="lbMsg"></span></div>
+    <p class="note">"Topic shift" sends a burst of tokens that prefer experts 3 and 4, like a sudden run of code. With balancing, the pressure pulls the load back toward an even split. Real systems use an auxiliary loss (Switch Transformer, Mixtral-style training), or, as in DeepSeek-V3, a per-expert bias that is nudged up for under-used experts and down for busy ones.</p>
+  </div>
+</section>
+
+<section id="compare">
+  <h2>Compare models that use it</h2>
+  <p>Click up to two rows to compare how each routes a token. Bars show total parameters in grey and active parameters in orange.</p>
+  <div class="controls" style="margin:0">
+    <div class="ctl">Sort <span class="seg" id="sSort"></span></div>
+    <div class="ctl">Scale <span class="seg" id="sScale"></span></div>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Model</th><th>Experts</th><th>Top-k</th><th>Total / active (B)</th><th>Active</th><th>Size</th></tr></thead>
+    <tbody id="tb"></tbody>
+  </table></div>
+  <div class="vs" id="vs"></div>
+  <p class="cap">Figures are rounded from vendor reports and model cards. "Experts" counts routed experts, with shared experts shown as +n. Grok-1's active share is reported as roughly 25%. GPT-4 and Gemini are not listed because their sizes are not confirmed by their makers in a way that can be tabulated.</p>
+  <div class="cols3">
+    <div class="panel"><h3>Few big experts</h3><p>Mixtral, Grok-1 and Llama 4 Scout use 8 to 16 large experts. Routing is simple and each expert is a full-size FFN.</p></div>
+    <div class="panel"><h3>Many small experts</h3><p>DeepSeek, Qwen3 and Kimi K2 use 128 to 384 fine-grained experts with top-8. More combinations per token, finer specialization.</p></div>
+    <div class="panel"><h3>Shared experts</h3><p>DeepSeek, Kimi K2 and Llama 4 keep one or more always-on experts for common knowledge, so routed experts can specialize.</p></div>
+  </div>
+</section>
+
+<footer>Built as a teaching sketch. Router scores, token routing and the balancing simulation are simplified models of the real mechanism, not outputs of an actual LLM.</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s)};
+var RM=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- helpers ---------- */
+function h32(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){return function(){seed=(seed+0x6D2B79F5)|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function scoresFor(tok,E){var r=rng(h32(tok));var a=[];for(var i=0;i<E;i++)a.push((r()+r()+r()-1.5)*2.6);return a}
+function topk(a,k){return a.map(function(v,i){return[v,i]}).sort(function(x,y){return y[0]-x[0]}).slice(0,k)}
+function softmax(v){var m=Math.max.apply(null,v),e=v.map(function(x){return Math.exp(x-m)}),s=e.reduce(function(p,c){return p+c},0);return e.map(function(x){return x/s})}
+function seg(el,opts,cur,cb){
+  el.innerHTML="";
+  opts.forEach(function(o){var b=document.createElement("button");b.type="button";b.textContent=o.label!==undefined?o.label:o;b.dataset.v=o.value!==undefined?o.value:o;
+    b.addEventListener("click",function(){cb(b.dataset.v)});el.appendChild(b)});
+  return function(v,dis){Array.prototype.forEach.call(el.children,function(b){b.setAttribute("aria-pressed",String(b.dataset.v===String(v)));b.disabled=!!(dis&&dis(b.dataset.v))})}
+}
+var css={t:0,v:{}};
+function col(n){var now=performance.now();if(now-css.t>400){var cs=getComputedStyle(document.documentElement);["--route","--expert","--shared","--muted","--line","--fg","--surface","--surface2"].forEach(function(k){css.v[k]=cs.getPropertyValue(k).trim()});css.t=now}return css.v[n]}
+
+/* ---------- 1. hero routing animation ---------- */
+(function(){
+  var cv=$("#hero"),ctx=cv.getContext("2d"),W=0,H=0,dpr=1;
+  var st={E:8,k:2,shared:false,paused:false};
+  var words=["The","cat","def","return","Paris","3.14","quantum","if","Le","{","because","import","tokens","7","dog","SELECT"];
+  var toks=[],glow=[],last=0,spawnAt=0,wi=0,DUR=3400,vis=true;
+  var setE=seg($("#hE"),[8,16,32,64],8,function(v){st.E=+v;if(st.k>st.E)st.k=st.E;sync();reset()});
+  var setK=seg($("#hK"),[1,2,4,8],2,function(v){st.k=+v;sync();reset()});
+  function sync(){setE(st.E);setK(st.k,function(v){return +v>st.E})}
+  sync();
+  $("#hShared").addEventListener("change",function(e){st.shared=e.target.checked;reset()});
+  $("#hPause").addEventListener("click",function(){st.paused=!st.paused;this.textContent=st.paused?"Resume":"Pause"});
+  function resize(){dpr=Math.min(2,window.devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);if(RM)draw(performance.now())}
+  window.addEventListener("resize",resize);
+  function slots(){return st.E+(st.shared?1:0)}
+  function lay(){var n=slots(),pad=18,ew=Math.min(92,W*.17);
+    var L={tx:W*.06,rx:W*.3,ex:W*.58,sx:W*.9,cy:H/2,ew:ew,pad:pad};
+    L.eh=Math.min(34,(H-2*pad)/n*.8);L.ey=function(i){return pad+(H-2*pad)*(i+.5)/n};return L}
+  function spawn(now){
+    var w=words[wi++%words.length],sc=scoresFor(w+st.E,st.E),tk=topk(sc,st.k),g=softmax(tk.map(function(x){return x[0]}));
+    toks.push({w:w,born:now,ex:tk.map(function(x){return x[1]+(st.shared?1:0)}),g:g,lane:(Math.random()-.5)*H*.5});
+  }
+  function reset(){toks=[];glow=[];spawnAt=0;if(RM){var n=performance.now();for(var i=0;i<5;i++){spawn(n-i*DUR/5-300)}draw(n)}}
+  function bez(a,b,c,d,t){var u=1-t;return u*u*u*a+3*u*u*t*b+3*u*t*t*c+t*t*t*d}
+  function ease(t){return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2}
+  function pt(x0,y0,x1,y1,t){var m=(x0+x1)/2;return[bez(x0,m,m,x1,t),bez(y0,y0,y1,y1,t)]}
+  function curve(x0,y0,x1,y1){var m=(x0+x1)/2;ctx.beginPath();ctx.moveTo(x0,y0);ctx.bezierCurveTo(m,y0,m,y1,x1,y1);ctx.stroke()}
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h)}
+  function draw(now){
+    var L=lay(),n=slots(),i;
+    ctx.clearRect(0,0,W,H);
+    ctx.lineWidth=1;ctx.strokeStyle=col("--line");
+    for(i=0;i<n;i++){curve(L.rx+20,L.cy,L.ex,L.ey(i));curve(L.ex+L.ew,L.ey(i),L.sx-18,L.cy)}
+    ctx.beginPath();ctx.moveTo(L.tx+30,L.cy);ctx.lineTo(L.rx-20,L.cy);ctx.stroke();
+    /* experts */
+    for(i=0;i<n;i++){
+      var isSh=st.shared&&i===0,g=glow[i]||0,c=isSh?col("--shared"):col("--expert");
+      rr(L.ex,L.ey(i)-L.eh/2,L.ew,L.eh,6);
+      ctx.fillStyle=col("--surface");ctx.fill();
+      ctx.save();ctx.globalAlpha=.15+.85*g;ctx.fillStyle=c;ctx.fill();ctx.restore();
+      ctx.lineWidth=1.2;ctx.strokeStyle=g>.05?c:col("--line");rr(L.ex,L.ey(i)-L.eh/2,L.ew,L.eh,6);ctx.stroke();
+      if(L.eh>=15){ctx.fillStyle=g>.5?"#fff":col("--muted");ctx.font="500 11px IBM Plex Mono,monospace";ctx.textAlign="center";ctx.textBaseline="middle";
+        ctx.fillText(isSh?"shared":"E"+(i-(st.shared?1:0)+1),L.ex+L.ew/2,L.ey(i)+.5)}
+    }
+    /* router */
+    ctx.fillStyle=col("--surface");ctx.strokeStyle=col("--route");ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(L.rx,L.cy,22,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle=col("--route");ctx.font="600 12px IBM Plex Mono,monospace";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("router",L.rx,L.cy+38);
+    ctx.fillText("G(x)",L.rx,L.cy+1);
+    /* sum */
+    ctx.fillStyle=col("--surface");ctx.strokeStyle=col("--fg");ctx.lineWidth=2;ctx.beginPath();ctx.arc(L.sx,L.cy,18,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle=col("--fg");ctx.font="600 16px IBM Plex Sans,sans-serif";ctx.fillText("Σ",L.sx,L.cy+1);
+    ctx.fillStyle=col("--muted");ctx.font="500 11px IBM Plex Mono,monospace";ctx.fillText("y",L.sx+34,L.cy);
+    ctx.textAlign="left";
+    /* tokens */
+    var routerPulse=0,sumPulse=0;
+    toks.forEach(function(T){
+      var t=(now-T.born)/DUR;if(t<0||t>1)return;
+      var x,y;
+      if(t<.25){var p=ease(t/.25);x=L.tx+(L.rx-20-L.tx)*p;y=L.cy+T.lane*(1-p)*.0+(T.lane*(1-p));
+        ctx.fillStyle=col("--route");var tw=ctx.measureText(T.w).width;ctx.font="500 12px IBM Plex Mono,monospace";tw=ctx.measureText(T.w).width+16;
+        rr(x-tw/2+10,y-11,tw,22,6);ctx.fill();ctx.fillStyle="#fff";ctx.textAlign="center";ctx.fillText(T.w,x+10,y+.5);ctx.textAlign="left"}
+      else if(t<.4){routerPulse=Math.max(routerPulse,1-Math.abs((t-.325)/.075))}
+      else if(t<.7){var q=ease((t-.4)/.3);
+        T.ex.forEach(function(e,j){var P=pt(L.rx+20,L.cy,L.ex,L.ey(e),q);ctx.fillStyle=col("--route");ctx.globalAlpha=.95;ctx.beginPath();ctx.arc(P[0],P[1],3+T.g[j]*6,0,7);ctx.fill();ctx.globalAlpha=1;
+          if(q>.55){ctx.fillStyle=col("--muted");ctx.font="500 10px IBM Plex Mono,monospace";ctx.fillText(T.g[j].toFixed(2),P[0]+8,P[1]-9)}})}
+      else if(t<.85){T.ex.forEach(function(e){glow[e]=Math.max(glow[e]||0,1-Math.abs((t-.775)/.075)*.6)});
+        if(st.shared)glow[0]=Math.max(glow[0]||0,1-Math.abs((t-.775)/.075)*.6)}
+      else{var r=ease((t-.85)/.15);var ids=T.ex.slice();if(st.shared)ids.push(0);
+        ids.forEach(function(e){var P=pt(L.ex+L.ew,L.ey(e),L.sx-18,L.cy,r);ctx.fillStyle=(st.shared&&e===0)?col("--shared"):col("--expert");ctx.beginPath();ctx.arc(P[0],P[1],4,0,7);ctx.fill()});
+        sumPulse=Math.max(sumPulse,r)}
+    });
+    if(routerPulse>0){ctx.strokeStyle=col("--route");ctx.globalAlpha=routerPulse*.6;ctx.lineWidth=3;ctx.beginPath();ctx.arc(L.rx,L.cy,22+routerPulse*12,0,7);ctx.stroke();ctx.globalAlpha=1}
+    if(sumPulse>.9){ctx.strokeStyle=col("--fg");ctx.globalAlpha=.4;ctx.lineWidth=3;ctx.beginPath();ctx.arc(L.sx,L.cy,18+(sumPulse-.9)*120,0,7);ctx.stroke();ctx.globalAlpha=1}
+    /* counter */
+    ctx.fillStyle=col("--muted");ctx.font="500 12px IBM Plex Mono,monospace";ctx.textAlign="left";ctx.textBaseline="top";
+    ctx.fillText(st.k+" of "+st.E+" experts run"+(st.shared?" + shared":"")+" for each token",12,10);
+  }
+  function loop(now){
+    var dt=now-last;last=now;if(dt>100)dt=16;
+    if(vis&&!st.paused){
+      if(now>=spawnAt){spawn(now);spawnAt=now+780}
+      toks=toks.filter(function(T){return now-T.born<DUR});
+      for(var i=0;i<glow.length;i++)if(glow[i])glow[i]*=Math.pow(.94,dt/16);
+      draw(now)}
+    requestAnimationFrame(loop)}
+  if("IntersectionObserver" in window)new IntersectionObserver(function(es){vis=es[0].isIntersecting}).observe(cv);
+  resize();
+  if(RM){reset()}else{requestAnimationFrame(loop)}
+  if(window.matchMedia)window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){css.t=0;if(RM)draw(performance.now())});
+})();
+
+/* ---------- 2. one-token walkthrough ---------- */
+(function(){
+  var TOK=["Write","a","Python","loop","to","count","Paris","visitors"],E=8,step=-1,tok=TOK[2],timer=null;
+  var chips=$("#tokChips"),stages=document.querySelectorAll("#stages .stage");
+  TOK.forEach(function(t){var b=document.createElement("button");b.type="button";b.className="chip";b.textContent=t;b.setAttribute("aria-pressed",String(t===tok));
+    b.addEventListener("click",function(){tok=t;Array.prototype.forEach.call(chips.children,function(c){c.setAttribute("aria-pressed",String(c===b))});build();go(0);if(!timer)play()});chips.appendChild(b)});
+  var vx=$("#vx"),rb=$("#rbars"),ex=$("#exps");
+  var cells=[],rows=[],boxes=[],S,top,gw,x,v1,v2;
+  function build(){
+    var r=rng(h32(tok)+7);x=[];for(var i=0;i<16;i++)x.push(r()*2-1);
+    S=scoresFor(tok,E);top=topk(S,2);gw=softmax(top.map(function(a){return a[0]}));
+    vx.innerHTML="";cells=x.map(function(v){var s=document.createElement("span");s.style.background=v>=0?"var(--route)":"var(--expert)";s.dataset.o=Math.max(.15,Math.abs(v));vx.appendChild(s);return s});
+    rb.innerHTML="";rows=S.map(function(s,i){var d=document.createElement("div");d.className="brow";d.innerHTML='<span>E'+(i+1)+'</span><span class="trk"><span class="fil"></span></span><span class="v"></span>';rb.appendChild(d);return d});
+    ex.innerHTML="";boxes=S.map(function(s,i){var d=document.createElement("div");d.className="exp";d.innerHTML='E'+(i+1)+'<small>idle</small>';ex.appendChild(d);return d});
+    var r1=rng(h32(tok+"a")),r2=rng(h32(tok+"b"));v1=[];v2=[];for(i=0;i<16;i++){v1.push(r1()*2-1);v2.push(r2()*2-1)}
+    var a=top[0][1]+1,b=top[1][1]+1;
+    function vec(vals){return '<div class="vec">'+vals.map(function(v){return '<span style="background:'+(v>=0?"var(--route)":"var(--expert)")+';opacity:'+Math.max(.12,Math.min(1,Math.abs(v))).toFixed(2)+'"></span>'}).join("")+'</div>'}
+    var y=v1.map(function(v,i){return gw[0]*v+gw[1]*v2[i]});
+    $("#mix").innerHTML='<div class="line"><span>E'+a+'(x)</span>'+vec(v1)+'</div><div class="line"><span>E'+b+'(x)</span>'+vec(v2)+'</div><div class="line"><b style="color:var(--fg)">y</b>'+vec(y)+'</div>';
+    $("#gates").innerHTML='g('+'E'+a+') = <b style="color:var(--route)">'+gw[0].toFixed(2)+'</b> &nbsp; g(E'+b+') = <b style="color:var(--route)">'+gw[1].toFixed(2)+'</b>';
+    $("#yform").innerHTML='y = '+gw[0].toFixed(2)+'·E'+a+'(x) + '+gw[1].toFixed(2)+'·E'+b+'(x)';
+    var mn=Math.min.apply(null,S),mx=Math.max.apply(null,S);rows.forEach(function(d,i){d.dataset.w=((S[i]-mn)/(mx-mn)*88+8)});
+  }
+  function apply(){
+    Array.prototype.forEach.call(stages,function(s,i){s.classList.toggle("on",i<=Math.min(step,4)&&!(i===3&&false))});
+    stages[0].classList.toggle("on",step>=0);stages[1].classList.toggle("on",step>=1);stages[2].classList.toggle("on",step>=2);stages[3].classList.toggle("on",step>=3);stages[4].classList.toggle("on",step>=4);
+    cells.forEach(function(c,i){setTimeout(function(){c.style.opacity=step>=0?c.dataset.o:0},RM?0:i*25)});
+    var picked=top.map(function(a){return a[1]});
+    rows.forEach(function(d,i){
+      var f=d.firstChild.nextSibling.firstChild,v=d.lastChild,isP=picked.indexOf(i)>-1;
+      d.classList.toggle("pick",step>=2&&isP);d.classList.toggle("skip",step>=2&&!isP);
+      if(step<1){f.style.width="0";v.textContent=""}
+      else if(step<3){f.style.width=d.dataset.w+"%";v.textContent=S[i].toFixed(2)}
+      else{var gi=picked.indexOf(i);f.style.width=gi>-1?(gw[gi]*100)+"%":"0";v.textContent=gi>-1?gw[gi].toFixed(2):"0"}
+    });
+    $("#rtSub").textContent=step>=3?"Weights after softmax":step>=2?"Top-2 scores kept":"Score for each expert";
+    boxes.forEach(function(b,i){var h=step>=2&&picked.indexOf(i)>-1;b.classList.toggle("hot",h);b.lastChild.textContent=step>=2?(h?"running":"skipped"):"idle"});
+    $("#stepLab").textContent="Step "+(Math.max(step,0)+1)+" of 5";
+  }
+  function go(n){step=Math.max(0,Math.min(4,n));apply()}
+  function play(){if(timer){clearInterval(timer);timer=null;$("#play").textContent="Play";return}
+    $("#play").textContent="Pause";if(step>=4)go(0);
+    timer=setInterval(function(){if(step>=4){clearInterval(timer);timer=null;$("#play").textContent="Replay";return}go(step+1)},1500)}
+  $("#play").addEventListener("click",play);
+  $("#next").addEventListener("click",function(){if(timer)play();go(step+1)});
+  $("#prev").addEventListener("click",function(){if(timer)play();go(step-1)});
+  build();
+  if(RM){go(4)}else{go(0);setTimeout(function(){if(step===0&&!timer)play()},900)}
+})();
+
+/* ---------- 3. cost calculator ---------- */
+(function(){
+  var SH=1.6,EXP=5.64,st={E:8,k:2},timer;
+  var setE=seg($("#cE"),[2,4,8,16,32,64],8,function(v){st.E=+v;if(st.k>st.E)st.k=st.E;build();render()});
+  var setK=seg($("#cK"),[1,2,4,8],2,function(v){st.k=+v;render()});
+  var cells=$("#cells");
+  function build(){cells.innerHTML="";cells.style.gridTemplateColumns="repeat("+Math.min(8,st.E)+",1fr)";for(var i=0;i<st.E;i++){var d=document.createElement("div");d.className="cell";cells.appendChild(d)}}
+  function fmt(x){return x>=100?x.toFixed(0)+"B":x.toFixed(1)+"B"}
+  function light(){var idx=[],n=st.E;while(idx.length<st.k&&idx.length<n){var r=Math.floor(Math.random()*n);if(idx.indexOf(r)<0)idx.push(r)}
+    Array.prototype.forEach.call(cells.children,function(c,i){c.classList.toggle("on",idx.indexOf(i)>-1)})}
+  function render(){
+    setE(st.E);setK(st.k,function(v){return +v>st.E});
+    var tot=SH+st.E*EXP,act=SH+st.k*EXP,maxT=SH+64*EXP;
+    $("#cPct").textContent=Math.round(act/tot*100)+"%";
+    $("#cTot").textContent=fmt(tot);$("#cAct").textContent=fmt(act);
+    $("#bTot").style.width=(tot/maxT*100)+"%";$("#bAct").style.width=(act/maxT*100)+"%";
+    $("#cMem").textContent=Math.round(tot*2)+" GB";
+    $("#cSave").textContent=(tot/act).toFixed(1)+"x less";
+    light();
+  }
+  $("#cNew").addEventListener("click",light);
+  build();render();
+  if(!RM)timer=setInterval(light,1600);
+})();
+
+/* ---------- 4. load balancing sim ---------- */
+(function(){
+  var E=8,lb=$("#lb"),lab=$("#lbLabels"),cols=[],base,b,share,boost,tick=0,on=true;
+  for(var i=0;i<E;i++){var c=document.createElement("div");c.className="col";c.innerHTML='<div class="bar" style="height:25%"></div>';lb.insertBefore(c,$("#lbIdeal"));cols.push(c);var s=document.createElement("span");s.textContent="E"+(i+1);lab.appendChild(s)}
+  $("#lbIdeal").style.bottom="25%";
+  function init(){var r=rng(42);base=[];b=[];share=[];for(var i=0;i<E;i++){base.push((r()-.5)*.8);b.push(0);share.push(1/E)}boost=0}
+  function gum(){return -Math.log(-Math.log(Math.random()+1e-9)+1e-9)*.55}
+  function step(){
+    var cnt=new Array(E).fill(0),N=16,t,i;
+    for(t=0;t<N;t++){var sc=[];for(i=0;i<E;i++)sc.push(base[i]+b[i]+gum()+(boost>0&&(i===2||i===3)?1.6:0));topk(sc,2).forEach(function(a){cnt[a[1]]++})}
+    for(i=0;i<E;i++){share[i]=.8*share[i]+.2*cnt[i]/(2*N);b[i]+=(on?-1:1)*1.3*(share[i]-1/E);b[i]=Math.max(-7,Math.min(7,b[i]))}
+    if(boost>0)boost--;
+    paint()}
+  function paint(){
+    var mx=0,idle=0;
+    share.forEach(function(s,i){cols[i].firstChild.style.height=Math.min(100,s/.5*100)+"%";cols[i].classList.toggle("hot",s*E>2.2);mx=Math.max(mx,s*E);if(s<.02)idle++});
+    $("#lbMax").textContent=mx.toFixed(1)+"x";$("#lbIdle").textContent=idle;
+    var m=$("#lbMsg");m.textContent=mx>2.5?"Routing has collapsed":mx>1.6?"Getting lopsided":"Healthy";m.style.color=mx>2.5?"var(--bad)":mx>1.6?"var(--route)":"var(--good)";m.style.fontWeight=600}
+  $("#lbOn").addEventListener("change",function(e){on=e.target.checked});
+  $("#lbShift").addEventListener("click",function(){boost=45});
+  $("#lbReset").addEventListener("click",function(){init();paint()});
+  init();
+  /* pre-run so the page opens in a meaningful state */
+  for(var k=0;k<20;k++){for(var j=0;j<1;j++){}}
+  var vis=true;if("IntersectionObserver" in window)new IntersectionObserver(function(es){vis=es[0].isIntersecting}).observe(lb);
+  paint();
+  if(!RM)setInterval(function(){if(vis)step()},130);else{for(var q=0;q<30;q++)step()}
+})();
+
+/* ---------- 5. model comparison ---------- */
+(function(){
+  var M=[
+   {n:"GLaM",o:"Google",y:2021,e:64,s:0,k:2,t:1200,a:97,bal:"Aux loss",note:"Early large sparse LM, top-2 gating"},
+   {n:"Mixtral 8x7B",o:"Mistral AI",y:2023,e:8,s:0,k:2,t:46.7,a:12.9,bal:"Softmax over top-2",note:"Open weights, Apache 2.0"},
+   {n:"Grok-1",o:"xAI",y:2024,e:8,s:0,k:2,t:314,a:86,bal:"Top-2",note:"Open weights, about 25% active"},
+   {n:"DBRX",o:"Databricks",y:2024,e:16,s:0,k:4,t:132,a:36,bal:"Top-4",note:"Fine-grained: 16 experts, 4 chosen"},
+   {n:"Mixtral 8x22B",o:"Mistral AI",y:2024,e:8,s:0,k:2,t:141,a:39,bal:"Softmax over top-2",note:"Scaled-up Mixtral"},
+   {n:"DeepSeek-V2",o:"DeepSeek",y:2024,e:160,s:2,k:6,t:236,a:21,bal:"Aux loss + device limits",note:"Fine-grained plus shared experts"},
+   {n:"DeepSeek-V3",o:"DeepSeek",y:2024,e:256,s:1,k:8,t:671,a:37,bal:"Aux-loss-free bias",note:"Sigmoid affinity, bias-based balancing"},
+   {n:"Llama 4 Scout",o:"Meta",y:2025,e:16,s:1,k:1,t:109,a:17,bal:"Top-1 + shared",note:"Routed expert plus shared expert"},
+   {n:"Llama 4 Maverick",o:"Meta",y:2025,e:128,s:1,k:1,t:400,a:17,bal:"Top-1 + shared",note:"MoE layers alternate with dense layers"},
+   {n:"Qwen3-235B-A22B",o:"Alibaba",y:2025,e:128,s:0,k:8,t:235,a:22,bal:"Global-batch balancing",note:"No shared experts"},
+   {n:"gpt-oss-120b",o:"OpenAI",y:2025,e:128,s:0,k:4,t:117,a:5.1,bal:"Top-4",note:"Open weights, small active share"},
+   {n:"Kimi K2",o:"Moonshot AI",y:2025,e:384,s:1,k:8,t:1000,a:32,bal:"Top-8 + shared",note:"Trillion-parameter sparse model"},
+   {n:"Llama 3.1 405B",o:"Meta",y:2024,e:1,s:0,k:1,t:405,a:405,bal:"Dense baseline",note:"Every parameter runs for every token",dense:true}
+  ];
+  var sort="y",scale="log",sel=["Mixtral 8x7B","DeepSeek-V3"],tb=$("#tb"),vs=$("#vs"),timers=[];
+  var setSort=seg($("#sSort"),[{label:"Year",value:"y"},{label:"Total",value:"t"},{label:"Active",value:"a"},{label:"Active %",value:"p"}],"y",function(v){sort=v;draw()});
+  var setScale=seg($("#sScale"),[{label:"Log",value:"log"},{label:"Linear",value:"lin"}],"log",function(v){scale=v;draw()});
+  function w(x){return scale==="log"?Math.max(1.5,Math.log(x)/Math.log(1100)*100):Math.max(.8,x/1000*100)}
+  function pct(m){return m.a/m.t*100}
+  function expTxt(m){return m.dense?"dense":m.e+(m.s?" +"+m.s:"")}
+  function draw(){
+    setSort(sort);setScale(scale);
+    var rows=M.slice().sort(function(a,b){return sort==="y"?a.y-b.y||a.t-b.t:sort==="t"?b.t-a.t:sort==="a"?b.a-a.a:pct(a)-pct(b)});
+    var existing={};Array.prototype.forEach.call(tb.children,function(tr){existing[tr.dataset.n]=tr});
+    rows.forEach(function(m){
+      var tr=existing[m.n];
+      if(!tr){tr=document.createElement("tr");tr.dataset.n=m.n;tr.tabIndex=0;tr.setAttribute("role","button");
+        tr.innerHTML='<td class="nm"><b>'+m.n+'</b><span>'+m.o+' · '+m.y+'</span></td><td class="num">'+expTxt(m)+'</td><td class="num">'+(m.dense?"all":m.k)+'</td><td class="num">'+(m.dense?m.t:m.t+" / "+m.a)+'</td><td class="num">'+Math.round(pct(m))+'%</td><td><div class="sz"><div class="tot" style="width:0"></div><div class="act" style="width:0"></div></div></td>';
+        tr.addEventListener("click",function(){toggle(m.n)});tr.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();toggle(m.n)}});
+        if(m.dense)tr.classList.add("dense")}
+      tb.appendChild(tr);
+      tr.classList.toggle("selA",sel[0]===m.n);tr.classList.toggle("selB",sel[1]===m.n);tr.setAttribute("aria-pressed",String(sel.indexOf(m.n)>-1));
+      var t=tr.querySelector(".tot"),a=tr.querySelector(".act");
+      requestAnimationFrame(function(){t.style.width=w(m.t)*.88+"%";a.style.width=w(m.a)*.88+"%"});
+    });
+    cards();
+  }
+  function toggle(n){var i=sel.indexOf(n);if(i>-1)sel.splice(i,1);else{sel.push(n);if(sel.length>2)sel.shift()}draw()}
+  function cards(){
+    timers.forEach(clearInterval);timers=[];vs.innerHTML="";
+    sel.forEach(function(n,idx){
+      var m=M.filter(function(x){return x.n===n})[0],c=document.createElement("div");c.className="card "+(idx===0?"A":"B");
+      var total=m.e+m.s;
+      c.innerHTML='<h3>'+m.n+'</h3><div class="cap">'+m.note+'</div><div class="dots"></div><dl><dt>Experts</dt><dd>'+(m.dense?"none (dense FFN)":m.e+" routed"+(m.s?" + "+m.s+" shared":""))+'</dd><dt>Per token</dt><dd>'+(m.dense?"everything":m.k+" routed"+(m.s?" + "+m.s+" shared":""))+'</dd><dt>Parameters</dt><dd>'+m.t+'B total, '+m.a+'B active ('+Math.round(pct(m))+'%)</dd><dt>Balancing</dt><dd>'+m.bal+'</dd></dl>';
+      vs.appendChild(c);
+      var dots=c.querySelector(".dots"),ds=[];
+      var n2=m.dense?1:total;for(var i=0;i<n2;i++){var d=document.createElement("i");if(i<m.s)d.className="sh";dots.appendChild(d);ds.push(d)}
+      function pulse(){ds.forEach(function(d){d.classList.remove("on")});
+        if(m.dense){ds[0].classList.add("on");return}
+        var pick=[];while(pick.length<m.k){var r=m.s+Math.floor(Math.random()*m.e);if(pick.indexOf(r)<0)pick.push(r)}
+        pick.forEach(function(r){ds[r].classList.add("on")});
+        for(var j=0;j<m.s;j++)ds[j].classList.add("on")}
+      pulse();if(!RM)timers.push(setInterval(pulse,1100));
+    });
+    if(!sel.length)vs.innerHTML='<p class="cap">Select a model row to see how it routes tokens.</p>';
+  }
+  draw();
+})();
+})();
+</script>
+
+</body></html>
