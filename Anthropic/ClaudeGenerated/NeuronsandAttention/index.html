@@ -1,0 +1,978 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Neurons and Attention</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: a lab notebook you scroll through. Each chapter = short prose + one live instrument.
+   Two signal colours carry meaning everywhere: --nn = classic neural network / positive weight, --tf = transformer / attention,
+   --warm = negative weight & gradients flowing backwards. */
+:root{
+  --paper:#ECEFF2; --panel:#F8FAFB; --ink:#132030; --muted:#566476; --rule:#D0D8E0;
+  --nn:#0A8576; --tf:#B0337A; --warm:#C46A16;
+  --display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E141A; --panel:#151D25; --ink:#E3E9EF; --muted:#94A2B1; --rule:#28333F;
+    --nn:#3DCDB5; --tf:#EE6AAE; --warm:#F0A04B; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E141A; --panel:#151D25; --ink:#E3E9EF; --muted:#94A2B1; --rule:#28333F;
+  --nn:#3DCDB5; --tf:#EE6AAE; --warm:#F0A04B; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:400 16px/1.62 var(--body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--tf);outline-offset:2px;border-radius:4px}
+b.nn,.nnc{color:var(--nn)} b.tf,.tfc{color:var(--tf)} .warmc{color:var(--warm)}
+.mono{font-family:var(--mono)}
+
+/* top bar */
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--paper) 90%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--rule)}
+.top .wrap{display:flex;align-items:center;gap:18px;height:52px;position:relative}
+.brand{font-family:var(--display);font-stretch:125%;font-weight:800;font-size:15px;white-space:nowrap;text-decoration:none}
+.brand i{font-style:normal;color:var(--nn)} .brand em{font-style:normal;color:var(--tf)}
+.top nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;min-width:0;margin-left:auto}
+.top nav::-webkit-scrollbar{display:none}
+.top nav a{font:500 13px var(--body);color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:6px;white-space:nowrap}
+.top nav a:hover,.top nav a.on{color:var(--ink);background:var(--panel)}
+#progress{position:absolute;left:0;bottom:-1px;height:2px;width:0;background:linear-gradient(90deg,var(--nn),var(--tf))}
+
+/* hero */
+.hero{padding-block:56px 44px}
+.eyebrow{font:600 12px/1.3 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--display);font-stretch:125%;font-weight:800;font-size:clamp(40px,7.6vw,96px);line-height:.94;letter-spacing:-.025em;margin:14px 0 20px;text-wrap:balance}
+h1 .a{color:var(--nn)} h1 .b{color:var(--tf)}
+.lede{font-size:clamp(17px,1.7vw,20px);max-width:60ch;margin:0}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:34px}
+.fig{margin:0;background:var(--panel);border:1px solid var(--rule);border-radius:12px;overflow:hidden;min-width:0}
+.fig canvas{display:block;width:100%}
+.duo canvas{height:270px}
+.fig figcaption{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 16px;border-top:1px solid var(--rule);font-size:14px;color:var(--muted)}
+.fig figcaption strong{color:var(--ink);font-weight:600}
+.tag{display:inline-block;font:600 10.5px/1.5 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:4px;white-space:nowrap}
+.tag.nn{color:var(--nn);background:color-mix(in srgb,var(--nn) 13%,transparent)}
+.tag.tf{color:var(--tf);background:color-mix(in srgb,var(--tf) 13%,transparent)}
+.tag.both{color:var(--ink);background:color-mix(in srgb,var(--ink) 9%,transparent)}
+.thesis{margin-top:26px;display:flex;flex-wrap:wrap;gap:10px 22px;font-size:14px;color:var(--muted)}
+.thesis span{display:flex;align-items:center;gap:8px}
+.sw{width:10px;height:10px;border-radius:50%;display:inline-block}
+
+/* chapters */
+.chap{padding-block:72px;border-top:1px solid var(--rule)}
+.chap-head{display:grid;gap:12px;max-width:760px;margin-bottom:28px}
+h2{font-family:var(--display);font-stretch:112%;font-weight:760;font-size:clamp(28px,3.8vw,46px);line-height:1.04;letter-spacing:-.018em;margin:0;text-wrap:balance}
+h3{font-family:var(--display);font-stretch:106%;font-weight:700;font-size:20px;line-height:1.2;margin:0;text-wrap:balance}
+.chap p{max-width:68ch;margin:0}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.inst{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:18px;min-width:0}
+.split{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px;align-items:start}
+.stack-y{display:grid;gap:14px;min-width:0}
+.note{border:1px dashed var(--muted);border-radius:10px;padding:14px 16px;display:grid;gap:6px;font-size:15px}
+.note .tag{justify-self:start}
+@media (max-width:860px){.split{grid-template-columns:minmax(0,1fr)}.duo{grid-template-columns:minmax(0,1fr)}}
+
+/* controls */
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.ctrl{display:grid;grid-template-columns:40px minmax(0,1fr) 54px;align-items:center;gap:10px;font:500 13px var(--mono)}
+.ctrl label{color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--nn);margin:0}
+#temp,#raceN{accent-color:var(--tf)}
+output{font-variant-numeric:tabular-nums;text-align:right;font-family:var(--mono)}
+.btn{font:600 13px var(--body);color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:7px;padding:8px 14px;cursor:pointer;transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--rule);border-radius:8px;padding:3px;gap:2px;background:var(--paper)}
+.seg button{font:500 13px var(--body);border:0;background:transparent;color:var(--muted);padding:6px 11px;border-radius:5px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+select{font:500 13px var(--mono);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:7px;padding:7px 8px}
+.chk{display:inline-flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.chk input{accent-color:var(--tf);width:16px;height:16px}
+.formula{font:500 13px/1.8 var(--mono);background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:10px 14px;overflow-x:auto;white-space:nowrap}
+.formula b{font-weight:600}
+.stats{display:flex;flex-wrap:wrap;gap:8px 22px;font:500 13px var(--mono);color:var(--muted)}
+.stats b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.lbl{font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+/* neuron */
+#neuronCv{height:290px}
+#actCv{height:170px}
+/* training */
+.train{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+#netCv{height:320px}
+#boundCv{aspect-ratio:1;width:100%;max-width:100%;border-radius:8px;border:1px solid var(--rule);display:block}
+#lossCv{height:110px}
+.phase{font:600 12px var(--mono);display:flex;gap:16px;flex-wrap:wrap}
+.phase span{opacity:.35;transition:opacity .2s}
+.phase span.on{opacity:1}
+@media (max-width:860px){.train{grid-template-columns:minmax(0,1fr)}#boundCv{max-width:360px;margin:auto}}
+
+/* embeddings */
+.emb-scroll{overflow-x:auto}
+.emb{display:grid;gap:10px 6px;align-items:center;min-width:max-content}
+.emb .lab{font:500 12px/1.3 var(--mono);color:var(--muted);padding-right:6px}
+.emb .tok{font:600 14px var(--body);text-align:center;display:grid;line-height:1.2}
+.emb .tok small{font:500 10.5px var(--mono);color:var(--muted)}
+.strip{display:grid;grid-template-rows:repeat(8,11px);gap:2px;width:30px;justify-self:center}
+.cell{border-radius:2px;background:color-mix(in srgb,var(--c) var(--p),var(--paper));animation:pop .5s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:var(--d)}
+@keyframes pop{from{opacity:0;transform:scaleX(.1)}}
+.op{font:700 16px var(--mono);color:var(--muted);text-align:center}
+
+/* attention */
+.att{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:18px;align-items:start}
+#attCv{height:380px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:500 14px var(--body);border:1px solid var(--rule);background:var(--paper);color:var(--ink);padding:4px 10px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed="true"]{border-color:var(--tf);background:color-mix(in srgb,var(--tf) 15%,var(--paper));color:var(--ink);font-weight:600}
+.hm{display:grid;gap:2px;font:500 10.5px var(--mono);max-width:440px}
+.hm .c{aspect-ratio:1;border-radius:2px;background:color-mix(in srgb,var(--tf) var(--p),var(--paper));transition:background-color .45s}
+.hm .c.mask{background:repeating-linear-gradient(45deg,var(--rule) 0 2px,transparent 2px 5px)}
+.hm .ch{writing-mode:vertical-rl;transform:rotate(180deg);color:var(--muted);text-align:left;height:52px;white-space:nowrap;justify-self:center}
+.hm .rh{color:var(--muted);text-align:right;padding-right:6px;cursor:pointer;background:none;border:0;font:inherit;white-space:nowrap}
+.hm .rh.on{color:var(--tf);font-weight:600}
+.hm .c.rowon{outline:1px solid var(--ink);outline-offset:-1px}
+.bars{display:grid;gap:5px}
+.bar{display:grid;grid-template-columns:62px minmax(0,1fr) 56px;align-items:center;gap:8px;font:500 12px var(--mono)}
+.bar .w{text-align:right;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .track{height:12px;background:var(--paper);border-radius:3px;overflow:hidden;border:1px solid var(--rule)}
+.bar .fill{height:100%;width:0;background:var(--tf);transition:width .55s cubic-bezier(.2,.8,.2,1)}
+.bar .fill.score{background:var(--muted)}
+.bar .fill.nnf{background:var(--nn)}
+.bar .v{text-align:right;font-variant-numeric:tabular-nums}
+@media (max-width:860px){.att{grid-template-columns:minmax(0,1fr)}}
+
+/* block stepper */
+.blockgrid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:22px;align-items:start}
+.flow{display:flex;flex-direction:column;gap:7px;position:relative}
+.blk{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--rule);background:var(--paper);border-radius:8px;padding:9px 12px;font:600 14px var(--body);cursor:pointer;text-align:left;color:var(--ink);width:100%;transition:border-color .25s,box-shadow .25s,transform .25s}
+.blk:hover{border-color:var(--muted)}
+.blk.on{border-color:var(--ink);box-shadow:0 0 0 3px color-mix(in srgb,var(--tf) 28%,transparent);transform:translateX(4px)}
+.blk.on.shared{box-shadow:0 0 0 3px color-mix(in srgb,var(--nn) 30%,transparent)}
+.repeat{border:1.5px dashed var(--muted);border-radius:12px;padding:16px 10px 10px;display:flex;flex-direction:column;gap:7px;position:relative}
+.repeat .xn{position:absolute;right:10px;top:-11px;background:var(--panel);font:700 12px var(--mono);padding:1px 6px;color:var(--muted)}
+.arrow{font:500 12px var(--mono);color:var(--muted);text-align:center;line-height:1}
+.detail{display:grid;gap:12px;min-width:0}
+.detail .num{font:600 12px var(--mono);color:var(--muted)}
+.detail h3{font-size:26px}
+.cmp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.cmp > div{background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:12px;font-size:14.5px;display:grid;gap:6px;align-content:start}
+.packet{width:9px;height:9px;border-radius:50%;background:var(--tf);display:inline-block;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+@media (max-width:760px){.blockgrid,.cmp{grid-template-columns:minmax(0,1fr)}}
+
+/* next token */
+.ctx{font:500 clamp(20px,2.6vw,28px)/1.35 var(--display);font-stretch:100%}
+.ctx mark{background:color-mix(in srgb,var(--tf) 20%,transparent);color:var(--ink);padding:0 6px;border-radius:5px;animation:pop .4s}
+.ctx .blank{display:inline-block;min-width:3ch;border-bottom:2px dashed var(--tf)}
+.tally{display:flex;flex-wrap:wrap;gap:5px;min-height:28px}
+.tally span{font:500 12px var(--mono);border:1px solid var(--rule);border-radius:5px;padding:2px 7px;animation:pop .35s}
+
+/* compare */
+#fixCvA,#fixCvB{height:250px}
+#raceCv{height:230px}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.col3{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:18px;display:grid;gap:10px;align-content:start}
+.col3.mid{background:color-mix(in srgb,var(--ink) 5%,var(--panel))}
+.col3 ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:15px}
+@media (max-width:860px){.three{grid-template-columns:minmax(0,1fr)}}
+.tblwrap{overflow-x:auto;border:1px solid var(--rule);border-radius:12px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px}
+th,td{padding:12px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule)}
+thead th{font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+tbody th{font-weight:600;width:22%}
+tr:last-child td,tr:last-child th{border-bottom:0}
+.racegrid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.racegrid{grid-template-columns:minmax(0,1fr)}}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 14px;font-size:14px;align-items:baseline}
+.kv .h{font:600 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.kv b{font:600 15px var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+
+/* quiz */
+.quiz{display:grid;gap:14px;max-width:780px}
+.q{display:grid;gap:10px}
+.q .opts{display:flex;flex-wrap:wrap;gap:8px}
+.q .opts button{font:500 14px var(--body);text-align:left;color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:8px 12px;cursor:pointer}
+.q .opts button.right{border-color:var(--nn);background:color-mix(in srgb,var(--nn) 16%,var(--paper))}
+.q .opts button.wrong{border-color:var(--warm);background:color-mix(in srgb,var(--warm) 14%,var(--paper))}
+.q .fb{font-size:14px;color:var(--muted);min-height:1.4em}
+#score{font:600 14px var(--mono)}
+footer{border-top:1px solid var(--rule);padding-block:28px 48px;font-size:13.5px;color:var(--muted)}
+footer p{max-width:80ch;margin:0}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">Neurons <i>&amp;</i> <em>Attention</em></a>
+    <nav aria-label="Chapters">
+      <a href="#neuron">Neuron</a><a href="#training">Training</a><a href="#embeddings">Embeddings</a><a href="#attention">Attention</a><a href="#block">Block</a><a href="#predict">Prediction</a><a href="#compare">Compare</a><a href="#quiz">Quiz</a>
+    </nav>
+    <div id="progress"></div>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero wrap">
+  <div class="eyebrow">An interactive field guide · 8 live instruments</div>
+  <h1>Wires that are <span class="a">fixed</span>,<br>wires that are <span class="b">chosen</span>.</h1>
+  <p class="lede">A Transformer <em>is</em> a neural network. Both are stacks of weighted sums and simple nonlinear functions, trained the same way. What changes is how information moves: a classic network sends signals down fixed wires, while a Transformer lets every word decide, on the fly, which other words to listen to.</p>
+  <div class="duo">
+    <figure class="fig">
+      <canvas id="heroNN" aria-label="Animated feed-forward network: pulses travel from input neurons through hidden layers to outputs"></canvas>
+      <figcaption><span><strong>Neural network.</strong> Signals flow forward, layer by layer, through the same connections every time.</span><span class="tag nn">Classic NN</span></figcaption>
+    </figure>
+    <figure class="fig">
+      <canvas id="heroTF" aria-label="Animated attention: one word at a time draws arcs to the other words, thicker arcs mean more attention"></canvas>
+      <figcaption><span><strong>Transformer.</strong> Each word looks at every other word and weighs how relevant it is.</span><span class="tag tf">Transformer</span></figcaption>
+    </figure>
+  </div>
+  <div class="thesis">
+    <span><i class="sw" style="background:var(--nn)"></i>Teal: classic neural network, positive weights</span>
+    <span><i class="sw" style="background:var(--tf)"></i>Magenta: Transformer and attention</span>
+    <span><i class="sw" style="background:var(--warm)"></i>Amber: negative weights and gradients</span>
+  </div>
+</section>
+
+<!-- §1 NEURON -->
+<section class="chap" id="neuron"><div class="wrap">
+  <div class="chap-head">
+    <div class="eyebrow nnc">§1 · Neural network · the building block</div>
+    <h2>One neuron: multiply, add, squash</h2>
+    <p>Every neural network, Transformers included, is built from this one operation. Each input is multiplied by a <b class="nn">weight</b>, the results are added together with a <b>bias</b>, and the sum passes through an <b>activation function</b> that bends the straight line into a curve. Drag the sliders and watch the signal change.</p>
+  </div>
+  <div class="split">
+    <div class="inst stack-y">
+      <canvas id="neuronCv" aria-label="Diagram of a single neuron with three inputs"></canvas>
+      <div class="formula" id="n-formula" aria-live="polite"></div>
+    </div>
+    <div class="inst stack-y">
+      <div class="lbl">Inputs (x)</div>
+      <div class="ctrl"><label for="n-x1">x₁</label><input id="n-x1" type="range" min="-1" max="1" step="0.05" value="0.8"><output id="o-x1"></output></div>
+      <div class="ctrl"><label for="n-x2">x₂</label><input id="n-x2" type="range" min="-1" max="1" step="0.05" value="-0.4"><output id="o-x2"></output></div>
+      <div class="ctrl"><label for="n-x3">x₃</label><input id="n-x3" type="range" min="-1" max="1" step="0.05" value="0.6"><output id="o-x3"></output></div>
+      <div class="lbl">Weights (w) and bias (b): what training learns</div>
+      <div class="ctrl"><label for="n-w1">w₁</label><input id="n-w1" type="range" min="-2" max="2" step="0.05" value="1.2"><output id="o-w1"></output></div>
+      <div class="ctrl"><label for="n-w2">w₂</label><input id="n-w2" type="range" min="-2" max="2" step="0.05" value="-0.8"><output id="o-w2"></output></div>
+      <div class="ctrl"><label for="n-w3">w₃</label><input id="n-w3" type="range" min="-2" max="2" step="0.05" value="0.5"><output id="o-w3"></output></div>
+      <div class="ctrl"><label for="n-b">b</label><input id="n-b" type="range" min="-2" max="2" step="0.05" value="0.1"><output id="o-b"></output></div>
+      <div class="lbl">Activation function</div>
+      <div class="seg" id="n-act" role="group" aria-label="Activation function">
+        <button data-act="relu" aria-pressed="true">ReLU</button><button data-act="sigmoid" aria-pressed="false">Sigmoid</button><button data-act="tanh" aria-pressed="false">tanh</button>
+      </div>
+      <canvas id="actCv" aria-label="Plot of the activation function with the current point"></canvas>
+    </div>
+  </div>
+</div></section>
+
+<!-- §2 TRAINING -->
+<section class="chap" id="training"><div class="wrap">
+  <div class="chap-head">
+    <div class="eyebrow nnc">§2 · Neural network · learning</div>
+    <h2>Stack neurons into layers, then let the errors teach them</h2>
+    <p>This is a real network running in your browser: 2 inputs → 6 → 6 → 1 output. It is trying to separate teal dots from amber dots. Each step has two halves: a <b>forward pass</b> makes predictions, then <b class="warmc">backpropagation</b> sends the error backwards and nudges every weight a little. Every small square shows what that neuron has learned to detect across the whole input space.</p>
+  </div>
+  <div class="inst stack-y">
+    <div class="row" style="justify-content:space-between">
+      <div class="row">
+        <button class="btn primary" id="t-play">Pause</button>
+        <button class="btn" id="t-step">Step once</button>
+        <button class="btn" id="t-reset">Reset weights</button>
+      </div>
+      <div class="row">
+        <div class="seg" id="t-ds" role="group" aria-label="Dataset">
+          <button data-ds="circle" aria-pressed="true">Circle</button><button data-ds="xor" aria-pressed="false">XOR</button><button data-ds="blobs" aria-pressed="false">Two blobs</button>
+        </div>
+        <label class="small muted" for="t-lr">Learning rate</label>
+        <select id="t-lr"><option>0.03</option><option>0.1</option><option selected>0.3</option><option>1.0</option></select>
+      </div>
+    </div>
+    <div class="train">
+      <div class="stack-y">
+        <canvas id="netCv" aria-label="Network diagram: edge thickness shows weight size, colour shows sign"></canvas>
+        <div class="phase"><span id="ph-f" class="on">● Forward pass: inputs → prediction</span><span id="ph-b" class="warmc">○ Backpropagation: error → weight updates</span></div>
+      </div>
+      <div class="stack-y">
+        <canvas id="boundCv" aria-label="Decision boundary learned by the network with training points"></canvas>
+        <div class="stats"><span>steps <b id="t-steps">0</b></span><span>loss <b id="t-loss">–</b></span><span>accuracy <b id="t-acc">–</b></span></div>
+      </div>
+    </div>
+    <div>
+      <div class="lbl" style="margin-bottom:6px">Loss over time (lower is better)</div>
+      <canvas id="lossCv" aria-label="Training loss curve"></canvas>
+    </div>
+  </div>
+  <div class="note" style="margin-top:18px">
+    <span class="tag both">Carry this forward</span>
+    <span>The weights here are learned once and then <strong>fixed</strong>. Feed the trained network any new point and it uses exactly the same wires. Keep that in mind for §4.</span>
+  </div>
+</div></section>
+
+<!-- §3 EMBEDDINGS -->
+<section class="chap" id="embeddings"><div class="wrap">
+  <div class="chap-head">
+    <div class="eyebrow tfc">§3 · Transformer · words become vectors</div>
+    <h2>Turn words into numbers, then stamp on their position</h2>
+    <p>Neural networks only read numbers. A Transformer looks each token up in a learned table to get its <b class="nn">embedding</b>, a vector that encodes meaning. Real models use thousands of numbers per token; here we show 8. Attention on its own has no sense of order, so a <b class="tf">position signal</b> made of sine waves is added to each vector.</p>
+  </div>
+  <div class="inst stack-y">
+    <div class="seg" id="e-sent" role="group" aria-label="Sentence">
+      <button data-i="0" aria-pressed="true">The cat sat on the mat</button><button data-i="1" aria-pressed="false">Attention is all you need</button><button data-i="2" aria-pressed="false">I love neural networks</button>
+    </div>
+    <div class="emb-scroll"><div class="emb" id="emb"></div></div>
+    <p class="small muted" id="e-note"></p>
+  </div>
+</div></section>
+
+<!-- §4 ATTENTION -->
+<section class="chap" id="attention"><div class="wrap">
+  <div class="chap-head">
+    <div class="eyebrow tfc">§4 · Transformer · self-attention</div>
+    <h2>Every word asks: who here matters to me?</h2>
+    <p>Each token produces a <b>query</b> (what am I looking for?), a <b>key</b> (what do I contain?) and a <b>value</b> (what do I pass on?). Matching one token's query against every key gives a score; a softmax turns the scores into weights that add up to 100%. The token's new vector is the weighted blend of everyone's values. A model runs several <b class="tf">heads</b> in parallel, and each learns a different kind of relationship.</p>
+  </div>
+  <div class="inst stack-y">
+    <div class="row" style="justify-content:space-between">
+      <div class="seg" id="a-head" role="group" aria-label="Attention head">
+        <button data-h="0" aria-pressed="false">Head 1 · previous word</button><button data-h="1" aria-pressed="true">Head 2 · who is “it”?</button><button data-h="2" aria-pressed="false">Head 3 · verb ↔ subject</button><button data-h="3" aria-pressed="false">Head 4 · broad context</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="a-causal"> Causal mask (GPT-style: no peeking ahead)</label>
+    </div>
+    <p class="small muted" id="a-headnote"></p>
+    <div><div class="lbl" style="margin-bottom:6px">Pick the word that is asking (query)</div><div class="chips" id="a-chips"></div></div>
+    <div class="att">
+      <canvas id="attCv" aria-label="Lines from the selected query word to every key word, thicker means more attention"></canvas>
+      <div class="stack-y">
+        <div>
+          <div class="lbl" style="margin-bottom:8px">Attention matrix · rows ask, columns answer</div>
+          <div class="hm" id="hm"></div>
+        </div>
+      </div>
+    </div>
+    <div class="split" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <div class="stack-y">
+        <div class="lbl">Step 1 · raw scores  q·k / √d</div>
+        <div class="bars" id="a-scores"></div>
+      </div>
+      <div class="stack-y">
+        <div class="lbl">Step 2 · softmax → attention weights</div>
+        <div class="bars" id="a-weights"></div>
+      </div>
+    </div>
+    <div class="formula" id="a-out"></div>
+  </div>
+</div></section>
+
+<!-- §5 BLOCK -->
+<section class="chap" id="block"><div class="wrap">
+  <div class="chap-head">
+    <div class="eyebrow tfc">§5 · Transformer · the full block</div>
+    <h2>Walk a sentence through the whole machine</h2>
+    <p>Press play, or click any stage. Each stage is tagged <span class="tag nn">Shared</span> if a classic neural network has the same part, or <span class="tag tf">New</span> if it was introduced with Transformers. Most of the machine is shared.</p>
+  </div>
+  <div class="inst">
+    <div class="blockgrid">
+      <div class="stack-y">
+        <div class="row"><button class="btn primary" id="b-play">Play</button><button class="btn" id="b-prev" aria-label="Previous stage">←</button><button class="btn" id="b-next" aria-label="Next stage">→</button></div>
+        <div class="flow" id="flow"></div>
+      </div>
+      <div class="detail" id="b-detail" aria-live="polite"></div>
+    </div>
+  </div>
+</div></section>
+
+<!-- §6 PREDICT -->
+<section class="chap" id="predict"><div class="wrap">
+  <div class="chap-head">
+    <div class="eyebrow tfc">§6 · Transformer · output</div>
+    <h2>The last layer is an ordinary classifier</h2>
+    <p>After the final block, a linear layer scores every word in the vocabulary and a softmax turns the scores into probabilities. That is exactly how the network in §2 produced its prediction. <b class="tf">Temperature</b> divides the scores before the softmax: low values make the model pick the safest word, high values make it adventurous.</p>
+  </div>
+  <div class="split">
+    <div class="inst stack-y">
+      <div class="ctx" id="p-ctx"></div>
+      <div class="bars" id="p-bars"></div>
+    </div>
+    <div class="inst stack-y">
+      <div class="ctrl" style="grid-template-columns:96px minmax(0,1fr) 46px"><label for="temp">Temperature</label><input id="temp" type="range" min="0.1" max="2" step="0.05" value="1"><output id="o-temp">1.00</output></div>
+      <div class="row"><button class="btn primary" id="p-sample">Sample a word</button><button class="btn" id="p-many">Sample 20 times</button><button class="btn" id="p-clear">Clear</button></div>
+      <div class="lbl">Recent picks</div>
+      <div class="tally" id="p-tally"></div>
+      <p class="small muted">Scores are illustrative values for this one sentence. A real model scores all ~50,000 to 200,000 tokens in its vocabulary.</p>
+    </div>
+  </div>
+</div></section>
+
+<!-- §7 COMPARE -->
+<section class="chap" id="compare"><div class="wrap">
+  <div class="chap-head">
+    <div class="eyebrow">§7 · Side by side</div>
+    <h2>The core difference: fixed wiring vs wiring chosen per input</h2>
+    <p>Feed both models a new sentence. In the classic network the <b class="nn">connection strengths never change</b>; only the values flowing through them do. In attention, the <b class="tf">connections themselves are recomputed</b> from the input every time.</p>
+  </div>
+  <div class="inst stack-y">
+    <div class="row"><button class="btn primary" id="f-next">Feed a new sentence</button><label class="chk"><input type="checkbox" id="f-auto" checked> Auto-cycle</label><span class="small muted" id="f-sent"></span></div>
+    <div class="duo" style="margin-top:0">
+      <figure class="fig">
+        <canvas id="fixCvA" aria-label="Fully connected layer: connections stay the same for every input"></canvas>
+        <figcaption><span><strong>Dense layer.</strong> Edges changed: <b class="nn mono" id="f-chA">0%</b></span><span class="tag nn">Weights fixed</span></figcaption>
+      </figure>
+      <figure class="fig">
+        <canvas id="fixCvB" aria-label="Attention layer: connections are recomputed for each input"></canvas>
+        <figcaption><span><strong>Attention layer.</strong> Edges changed: <b class="tf mono" id="f-chB">0%</b></span><span class="tag tf">Weights computed</span></figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <div class="chap-head" style="margin-top:56px">
+    <h3>Sequential vs parallel</h3>
+    <p>Before Transformers, language networks were mostly <strong>recurrent</strong> (RNNs): they read one word at a time and passed a running summary forward. A Transformer layer handles every word at once and connects each pair directly. That makes it fast on GPUs, at the price of comparing n × n pairs.</p>
+  </div>
+  <div class="inst racegrid">
+    <div class="stack-y">
+      <canvas id="raceCv" aria-label="Race between a recurrent network and a transformer layer processing the same tokens"></canvas>
+      <div class="row"><button class="btn primary" id="r-run">Run both</button>
+        <div class="ctrl" style="grid-template-columns:70px minmax(120px,1fr) 30px;flex:1"><label for="raceN">Tokens n</label><input id="raceN" type="range" min="4" max="16" step="1" value="8"><output id="o-raceN">8</output></div>
+      </div>
+    </div>
+    <div class="kv" id="r-kv"></div>
+  </div>
+
+  <div class="three" style="margin-top:56px">
+    <div class="col3"><span class="tag nn">Only classic NN (MLP)</span><ul>
+      <li>Fixed-size input, e.g. exactly 784 pixels</li>
+      <li>Connections fixed after training</li>
+      <li>No built-in idea of “which other input is relevant”</li>
+      <li>Small and cheap for tabular or simple data</li>
+    </ul></div>
+    <div class="col3 mid"><span class="tag both">Shared by both</span><ul>
+      <li>Neurons: weighted sum + bias + activation</li>
+      <li>Layers stacked for depth</li>
+      <li>Trained by backpropagation and gradient descent</li>
+      <li>Loss function measures the error</li>
+      <li>Softmax output layer for classification</li>
+      <li>A Transformer block <em>contains</em> an MLP</li>
+    </ul></div>
+    <div class="col3"><span class="tag tf">Only Transformer</span><ul>
+      <li>Variable-length sequences of tokens</li>
+      <li>Self-attention: connections computed per input</li>
+      <li>Positional encoding to recover word order</li>
+      <li>Multi-head attention, parallel relationships</li>
+      <li>Cost grows with n² in sequence length</li>
+    </ul></div>
+  </div>
+
+  <div class="tblwrap" style="margin-top:20px">
+    <table>
+      <thead><tr><th>Aspect</th><th>Classic neural network (MLP)</th><th>Transformer</th></tr></thead>
+      <tbody>
+        <tr><th>Basic unit</th><td>Neuron: Σ w·x + b, then activation</td><td>Same neurons, inside attention projections and feed-forward sublayers</td></tr>
+        <tr><th>Input</th><td>A fixed-length vector of numbers</td><td>A sequence of token embeddings of any length (up to a context limit)</td></tr>
+        <tr><th>How information mixes</th><td>Through fixed learned weights between layers</td><td>Through attention weights computed fresh for each input, then fixed-weight MLPs per token</td></tr>
+        <tr><th>Word order</th><td>Implicit in which input slot a value occupies</td><td>Must be added explicitly with positional encodings</td></tr>
+        <tr><th>Long-range links</th><td>Only via deeper layers</td><td>Any token can reach any other in one attention step</td></tr>
+        <tr><th>Compute per layer</th><td>Proportional to (inputs × outputs)</td><td>Attention ∝ n² · d, plus feed-forward ∝ n · d²</td></tr>
+        <tr><th>Training</th><td>Backprop + gradient descent</td><td>Backprop + gradient descent (usually Adam), at much larger scale</td></tr>
+        <tr><th>Typical scale</th><td>Thousands to millions of weights</td><td>Millions to hundreds of billions of weights</td></tr>
+        <tr><th>Typical use</th><td>Tabular prediction, simple classifiers, parts of larger systems</td><td>Language models, translation, code, vision (ViT), audio, protein folding</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div></section>
+
+<!-- §8 QUIZ -->
+<section class="chap" id="quiz"><div class="wrap">
+  <div class="chap-head">
+    <div class="eyebrow">§8 · Check yourself</div>
+    <h2>Five questions</h2>
+    <p>Pick an answer to see why it is right or wrong. <span id="score"></span></p>
+  </div>
+  <div class="quiz" id="quizBox"></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <p>The network in §2 trains for real in your browser. Attention patterns in §4 and §7 and word scores in §6 are hand-set illustrations modelled on patterns seen in trained models; no language model runs on this page.</p>
+</div></footer>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SPEED = reduce ? 0.3 : 1;
+
+/* ---------- theme colours for canvas ---------- */
+const COL = {};
+function readCols(){ const cs = getComputedStyle(document.documentElement); ['paper','panel','ink','muted','rule','nn','tf','warm'].forEach(k => COL[k] = cs.getPropertyValue('--'+k).trim()); }
+readCols();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readCols);
+new MutationObserver(readCols).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+function rgb(hex){ hex = (hex||'#000').replace('#',''); if(hex.length===3) hex = hex.split('').map(c=>c+c).join(''); const n = parseInt(hex,16); return [n>>16&255, n>>8&255, n&255]; }
+function A(hex,a){ const [r,g,b] = rgb(hex); return `rgba(${r},${g},${b},${Math.max(0,Math.min(1,a))})`; }
+const FONT_M = '"JetBrains Mono", ui-monospace, monospace';
+const FONT_B = '"IBM Plex Sans", system-ui, sans-serif';
+
+/* ---------- canvas + loop helpers ---------- */
+function fit(cv){ const r = cv.getBoundingClientRect(), d = window.devicePixelRatio||1; const W = Math.max(1,Math.round(r.width*d)), H = Math.max(1,Math.round(r.height*d)); if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;} const ctx = cv.getContext('2d'); ctx.setTransform(d,0,0,d,0,0); return {ctx, w:r.width, h:r.height}; }
+function rr(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function dot(ctx,x,y,r){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); }
+function softmax(a,T=1){ const f = a.map(v=>v/T); const m = Math.max(...f.filter(Number.isFinite)); const e = f.map(v=>Number.isFinite(v)?Math.exp(v-m):0); const s = e.reduce((p,c)=>p+c,0); return e.map(v=>v/s); }
+const fmt = v => (v < -0.0049 ? '−' : '') + Math.abs(v).toFixed(2);
+const loops = [];
+const io = new IntersectionObserver(es => es.forEach(e => { if(e.target._loop) e.target._loop.vis = e.isIntersecting; }), {rootMargin:'120px'});
+function addLoop(el, fn){ const o = {el, fn, vis:true}; el._loop = o; loops.push(o); io.observe(el); }
+let last = performance.now();
+function frame(now){ const dt = Math.min(0.05,(now-last)/1000); last = now; for(const o of loops) if(o.vis){ try{ o.fn(dt, now/1000); }catch(err){ console.error(err); } } requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+function hash(s){ let h = 2166136261; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h,16777619); } return h>>>0; }
+function hv(word,d){ return (hash(word.toLowerCase()+'#'+d) % 2001)/1000 - 1; }
+function press(group, btn){ group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b===btn ? 'true':'false')); }
+
+/* ---------- nav: active + progress ---------- */
+const navLinks = $$('.top nav a');
+const secIO = new IntersectionObserver(es => es.forEach(e => { if(e.isIntersecting){ navLinks.forEach(a => a.classList.toggle('on', a.getAttribute('href')==='#'+e.target.id)); } }), {rootMargin:'-45% 0px -50% 0px'});
+$$('section.chap').forEach(s => secIO.observe(s));
+addEventListener('scroll', () => { const h = document.documentElement; $('#progress').style.width = (100*h.scrollTop/Math.max(1,h.scrollHeight-h.clientHeight))+'%'; }, {passive:true});
+
+/* =========================================================
+   HERO · neural network pulses
+   ========================================================= */
+(function(){
+  const cv = $('#heroNN'), L = [3,5,5,2]; let parts = [], sp = 0;
+  const glow = L.map(n => new Array(n).fill(0));
+  const P = (l,i,w,h) => { const x = 36+(w-72)*l/(L.length-1); const gap = Math.min(46,(h-50)/L[l]); return [x, (h-14)/2 + (i-(L[l]-1)/2)*gap]; };
+  addLoop(cv, dt => {
+    dt *= SPEED;
+    const {ctx,w,h} = fit(cv); ctx.clearRect(0,0,w,h);
+    ctx.lineWidth = 1; ctx.strokeStyle = A(COL.ink,.12); ctx.beginPath();
+    for(let l=0;l<L.length-1;l++) for(let i=0;i<L[l];i++) for(let j=0;j<L[l+1];j++){ const a=P(l,i,w,h), b=P(l+1,j,w,h); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); }
+    ctx.stroke();
+    sp -= dt;
+    if(sp <= 0 && parts.length < 70){ sp = .3; const i = Math.random()*L[0]|0; glow[0][i] = 1; const k = Math.random()<.5?2:1; for(let q=0;q<k;q++) parts.push({l:0,i,j:Math.random()*L[1]|0,t:0}); }
+    const nxt = [];
+    for(const p of parts){ p.t += dt*1.3; if(p.t >= 1){ glow[p.l+1][p.j] = 1; if(p.l+1 < L.length-1){ const k = Math.random()<.4?2:1; for(let q=0;q<k;q++) nxt.push({l:p.l+1,i:p.j,j:Math.random()*L[p.l+2]|0,t:0}); } } else nxt.push(p); }
+    parts = nxt.slice(0,90);
+    ctx.lineCap = 'round';
+    for(const p of parts){ const a=P(p.l,p.i,w,h), b=P(p.l+1,p.j,w,h); const t0 = Math.max(0,p.t-.2);
+      ctx.strokeStyle = A(COL.nn,.45); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a[0]+(b[0]-a[0])*t0, a[1]+(b[1]-a[1])*t0); ctx.lineTo(a[0]+(b[0]-a[0])*p.t, a[1]+(b[1]-a[1])*p.t); ctx.stroke();
+      ctx.fillStyle = COL.nn; dot(ctx, a[0]+(b[0]-a[0])*p.t, a[1]+(b[1]-a[1])*p.t, 3); ctx.fill(); }
+    for(let l=0;l<L.length;l++) for(let i=0;i<L[l];i++){ const [x,y] = P(l,i,w,h); glow[l][i] *= Math.exp(-dt*2.4);
+      ctx.fillStyle = COL.panel; dot(ctx,x,y,9); ctx.fill(); ctx.strokeStyle = A(COL.ink,.5); ctx.lineWidth = 1.3; ctx.stroke();
+      ctx.fillStyle = A(COL.nn, glow[l][i]*.9); dot(ctx,x,y,9); ctx.fill(); }
+    ctx.fillStyle = COL.muted; ctx.font = `500 10px ${FONT_M}`; ctx.textAlign = 'center';
+    ['INPUT','HIDDEN','HIDDEN','OUTPUT'].forEach((t,l) => ctx.fillText(t, P(l,0,w,h)[0], h-12));
+  });
+})();
+
+/* =========================================================
+   HERO · attention arcs
+   ========================================================= */
+(function(){
+  const cv = $('#heroTF'); const T = ['The','cat','sat','on','the','mat']; const n = T.length;
+  const PREF = [[2,3,.5,0,0,.5],[1,2,2,0,0,1.5],[.5,3,1.5,.5,0,1.8],[0,.5,2.4,1,.6,2],[0,.4,0,.8,1,3.2],[.5,2.4,1.4,1.6,1,1.4]];
+  let q = 1, t = 0; const pick = () => softmax(PREF[q].map(v => v + Math.random()*.5)); let W = pick();
+  addLoop(cv, dt => {
+    dt *= SPEED; t += dt/2.1; if(t >= 1){ t = 0; q = (q+1)%n; W = pick(); }
+    const {ctx,w,h} = fit(cv); ctx.clearRect(0,0,w,h);
+    const pad = 12, bw = (w-pad*2)/n, y = h-58; const cx = i => pad + bw*(i+.5);
+    const grow = Math.min(1,t*2.6), fade = t > .82 ? (1-t)/.18 : 1;
+    ctx.lineCap = 'round';
+    for(let j=0;j<n;j++){ if(j===q) continue; const wg = W[j]; const x0 = cx(q), x1 = cx(j), y0 = y-16; const c = [(x0+x1)/2, y0 - Math.min(h-110, 26+Math.abs(x1-x0)*.62)];
+      ctx.strokeStyle = A(COL.tf,(.12+.88*wg)*fade); ctx.lineWidth = 1+wg*10; ctx.beginPath();
+      for(let s=0;s<=grow+1e-6;s+=.025){ const u=1-s; const px = u*u*x0+2*u*s*c[0]+s*s*x1, py = u*u*y0+2*u*s*c[1]+s*s*y0; s===0?ctx.moveTo(px,py):ctx.lineTo(px,py); }
+      ctx.stroke(); }
+    ctx.strokeStyle = A(COL.tf,(.2+.8*W[q])*fade); ctx.lineWidth = 1+W[q]*8; ctx.beginPath(); ctx.arc(cx(q), y-28, 9, 0, Math.PI*2*grow); ctx.stroke();
+    ctx.textAlign = 'center';
+    for(let i=0;i<n;i++){ const on = i===q; rr(ctx, cx(i)-bw/2+4, y-15, bw-8, 30, 6); ctx.fillStyle = on ? A(COL.tf,.16) : COL.paper; ctx.fill(); ctx.strokeStyle = on ? COL.tf : COL.rule; ctx.lineWidth = on?1.6:1; ctx.stroke();
+      ctx.fillStyle = COL.ink; ctx.font = `${on?600:500} 13px ${FONT_B}`; ctx.fillText(T[i], cx(i), y+5);
+      ctx.fillStyle = A(COL.tf, .35+.65*fade); ctx.font = `500 11px ${FONT_M}`; ctx.fillText(Math.round(W[i]*100)+'%', cx(i), y+34); }
+    ctx.fillStyle = COL.muted; ctx.font = `500 10px ${FONT_M}`; ctx.textAlign='left'; ctx.fillText('QUERY: “'+T[q]+'” → attention to each word', pad+4, 18);
+  });
+})();
+
+/* =========================================================
+   §1 · single neuron
+   ========================================================= */
+(function(){
+  const S = {x:[.8,-.4,.6], w:[1.2,-.8,.5], b:.1, act:'relu'};
+  const F = {relu:z=>Math.max(0,z), sigmoid:z=>1/(1+Math.exp(-z)), tanh:z=>Math.tanh(z)};
+  const ids = ['x1','x2','x3','w1','w2','w3','b'];
+  const z = () => S.x.reduce((s,x,i)=>s+x*S.w[i],0) + S.b;
+  function read(){ S.x = [1,2,3].map(i=>+$('#n-x'+i).value); S.w = [1,2,3].map(i=>+$('#n-w'+i).value); S.b = +$('#n-b').value; ids.forEach(id => $('#o-'+id).textContent = fmt(+$('#n-'+id).value)); formula(); }
+  function formula(){ const zz = z(), a = F[S.act](zz);
+    $('#n-formula').innerHTML = `z = ${S.x.map((x,i)=>`(${fmt(x)} × <span class="${S.w[i]>=0?'nnc':'warmc'}">${fmt(S.w[i])}</span>)`).join(' + ')} + ${fmt(S.b)} = <b>${fmt(zz)}</b><br>a = ${S.act}(${fmt(zz)}) = <b class="nnc">${fmt(a)}</b>`; }
+  ids.forEach(id => $('#n-'+id).addEventListener('input', read));
+  $$('#n-act button').forEach(b => b.addEventListener('click', () => { S.act = b.dataset.act; press($('#n-act'), b); formula(); }));
+  read();
+
+  const cv = $('#neuronCv'); let T = 0;
+  addLoop(cv, dt => {
+    T += dt*SPEED;
+    const {ctx,w,h} = fit(cv); ctx.clearRect(0,0,w,h);
+    const ins = [0,1,2].map(i => [48, h*(.2+.28*i)]); const N = [w*.56, h*.46]; const O = [w-46, h*.46];
+    const zz = z(), a = F[S.act](zz);
+    const drawEdge = (p0,p1,col,wd,speed,strength) => {
+      ctx.strokeStyle = A(col,.5); ctx.lineWidth = wd; ctx.beginPath(); ctx.moveTo(p0[0],p0[1]); ctx.lineTo(p1[0],p1[1]); ctx.stroke();
+      for(let k=0;k<4;k++){ const s = (T*speed + k/4) % 1; ctx.fillStyle = A(col,.25+.7*Math.min(1,strength)); dot(ctx, p0[0]+(p1[0]-p0[0])*s, p0[1]+(p1[1]-p0[1])*s, 2+Math.min(1.5,strength)*1.8); ctx.fill(); }
+    };
+    ctx.lineCap = 'round';
+    ins.forEach((p,i) => { const col = S.w[i]>=0 ? COL.nn : COL.warm; drawEdge(p, N, col, 1+Math.abs(S.w[i])*2.4, .15+.55*Math.abs(S.x[i]), Math.abs(S.x[i]*S.w[i])); });
+    const bp = [N[0], h-22]; drawEdge(bp, N, S.b>=0?COL.nn:COL.warm, 1+Math.abs(S.b)*2, .2+.3*Math.abs(S.b), Math.abs(S.b));
+    const outCol = a>=0 ? COL.nn : COL.warm; drawEdge(N, O, outCol, 1.5+Math.min(3,Math.abs(a))*1.2, .15+.5*Math.min(1,Math.abs(a)), Math.min(1.5,Math.abs(a)));
+    ctx.font = `500 11px ${FONT_M}`; ctx.textAlign = 'center';
+    ins.forEach((p,i) => { const mx = p[0]+(N[0]-p[0])*.5, my = p[1]+(N[1]-p[1])*.5 - 4; const t = `w${i+1} ${fmt(S.w[i])}`; const tw = ctx.measureText(t).width+8;
+      ctx.fillStyle = COL.panel; ctx.fillRect(mx-tw/2, my-10, tw, 15); ctx.fillStyle = S.w[i]>=0 ? COL.nn : COL.warm; ctx.fillText(t, mx, my+1); });
+    ctx.fillStyle = COL.panel; ctx.fillRect(bp[0]-32, bp[1]-9, 64, 16); ctx.fillStyle = COL.muted; ctx.fillText('b '+fmt(S.b), bp[0], bp[1]+3);
+    ins.forEach((p,i) => { ctx.fillStyle = COL.paper; dot(ctx,p[0],p[1],21); ctx.fill(); ctx.fillStyle = A(S.x[i]>=0?COL.nn:COL.warm, Math.abs(S.x[i])*.6); ctx.fill(); ctx.strokeStyle = COL.rule; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = COL.ink; ctx.font = `600 12px ${FONT_M}`; ctx.fillText(fmt(S.x[i]), p[0], p[1]+4); ctx.fillStyle = COL.muted; ctx.font = `500 10px ${FONT_M}`; ctx.fillText('x'+(i+1), p[0], p[1]-26); });
+    ctx.fillStyle = COL.panel; dot(ctx,N[0],N[1],38); ctx.fill(); ctx.strokeStyle = COL.ink; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.fillStyle = COL.ink; ctx.font = `700 24px ${FONT_B}`; ctx.fillText('Σ', N[0]-12, N[1]+6); ctx.font = `500 16px ${FONT_M}`; ctx.fillText('→f', N[0]+12, N[1]+5);
+    ctx.fillStyle = COL.muted; ctx.font = `500 11px ${FONT_M}`; ctx.fillText('z = '+fmt(zz), N[0], N[1]-46);
+    const norm = S.act==='sigmoid' ? a : S.act==='tanh' ? Math.abs(a) : Math.min(1,a/3);
+    ctx.fillStyle = COL.paper; dot(ctx,O[0],O[1],25); ctx.fill(); ctx.fillStyle = A(outCol, .15+norm*.75); ctx.fill(); ctx.strokeStyle = COL.ink; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = COL.ink; ctx.font = `600 12px ${FONT_M}`; ctx.fillText(fmt(a), O[0], O[1]+4); ctx.fillStyle = COL.muted; ctx.font = `500 10px ${FONT_M}`; ctx.fillText('output a', O[0], O[1]-32);
+  });
+
+  const pc = $('#actCv');
+  addLoop(pc, () => {
+    const {ctx,w,h} = fit(pc); ctx.clearRect(0,0,w,h);
+    const R = {relu:[-.6,4.2], sigmoid:[-.15,1.15], tanh:[-1.2,1.2]}[S.act]; const ml=34, mr=10, mt=14, mb=22;
+    const X = v => ml + (v+4)/8*(w-ml-mr), Y = v => mt + (R[1]-v)/(R[1]-R[0])*(h-mt-mb);
+    ctx.strokeStyle = COL.rule; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(ml,Y(0)); ctx.lineTo(w-mr,Y(0)); ctx.moveTo(X(0),mt); ctx.lineTo(X(0),h-mb); ctx.stroke();
+    ctx.fillStyle = COL.muted; ctx.font = `500 10px ${FONT_M}`; ctx.textAlign = 'center'; [-4,-2,0,2,4].forEach(v => ctx.fillText(v, X(v), h-6));
+    ctx.textAlign = 'right'; [R[0]<-.5?R[0]:0, R[1]].forEach(v => ctx.fillText(v.toFixed(1), ml-6, Y(v)+3));
+    ctx.strokeStyle = COL.ink; ctx.lineWidth = 2; ctx.beginPath(); for(let i=0;i<=120;i++){ const zv = -4+8*i/120; const y = Y(F[S.act](zv)); i?ctx.lineTo(X(zv),y):ctx.moveTo(X(zv),y); } ctx.stroke();
+    const zz = Math.max(-4,Math.min(4,z())), av = F[S.act](zz);
+    ctx.setLineDash([3,3]); ctx.strokeStyle = COL.muted; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X(zz),Y(0)); ctx.lineTo(X(zz),Y(av)); ctx.lineTo(X(0),Y(av)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = COL.nn; dot(ctx,X(zz),Y(av),5.5); ctx.fill(); ctx.strokeStyle = COL.panel; ctx.lineWidth = 2; ctx.stroke();
+    ctx.textAlign = 'left'; ctx.fillStyle = COL.muted; ctx.fillText(S.act+'(z)', ml+6, mt+8);
+  });
+})();
+
+/* =========================================================
+   §2 · trainable network
+   ========================================================= */
+(function(){
+  const sizes = [2,6,6,1], NL = sizes.length-1;
+  let W, B, data, steps, hist, playing = true, lr = .3, ds = 'circle', acc = 0, waveT = 0, seed = 7;
+  const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
+  const gauss = () => { let u = 0; while(!u) u = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*rnd()); };
+  const sig = z => 1/(1+Math.exp(-z));
+  function init(){ W = []; B = []; for(let l=0;l<NL;l++){ const n = sizes[l], m = sizes[l+1]; W.push(Array.from({length:m},()=>Array.from({length:n},()=>gauss()*Math.sqrt(1/n)*1.3))); B.push(Array.from({length:m},()=>gauss()*.1)); } steps = 0; hist = []; acc = 0; updStats(); }
+  function makeData(){ data = []; for(let i=0;i<200;i++){ let x, y, l;
+    if(ds==='circle'){ l = i%2; const r = l ? rnd()*.42 : .62+rnd()*.34; const t = rnd()*Math.PI*2; x = r*Math.cos(t); y = r*Math.sin(t); }
+    else if(ds==='xor'){ x = rnd()*1.8-.9; y = rnd()*1.8-.9; x += x>0?.08:-.08; y += y>0?.08:-.08; l = x*y>0?1:0; }
+    else { l = i%2; const c = l ? .42 : -.42; x = c+gauss()*.2; y = c+gauss()*.2; }
+    data.push([x,y,l]); } }
+  function fwd(x){ const acts = [x]; for(let l=0;l<NL;l++){ const ap = acts[l]; const a = W[l].map((row,j) => { let s = B[l][j]; for(let k=0;k<row.length;k++) s += row[k]*ap[k]; return l===NL-1 ? sig(s) : Math.tanh(s); }); acts.push(a); } return acts; }
+  function step(){
+    const gW = W.map(m => m.map(r => r.map(()=>0))), gB = B.map(b => b.map(()=>0)); let loss = 0, ok = 0;
+    for(const d of data){ const acts = fwd([d[0],d[1]]); const p = acts[NL][0];
+      loss += -(d[2]*Math.log(p+1e-9) + (1-d[2])*Math.log(1-p+1e-9)); if((p>.5) === (d[2]===1)) ok++;
+      let delta = [p-d[2]];
+      for(let l=NL-1;l>=0;l--){ const ap = acts[l];
+        for(let j=0;j<delta.length;j++){ gB[l][j] += delta[j]; for(let k=0;k<ap.length;k++) gW[l][j][k] += delta[j]*ap[k]; }
+        if(l>0) delta = ap.map((a,k) => { let s = 0; for(let j=0;j<delta.length;j++) s += W[l][j][k]*delta[j]; return s*(1-a*a); }); } }
+    const n = data.length; for(let l=0;l<NL;l++) for(let j=0;j<W[l].length;j++){ B[l][j] -= lr*gB[l][j]/n; for(let k=0;k<W[l][j].length;k++) W[l][j][k] -= lr*gW[l][j][k]/n; }
+    steps++; hist.push(loss/n); acc = ok/n; if(hist.length > 600) hist = hist.filter((_,i)=>i%2===0);
+  }
+  function updStats(){ $('#t-steps').textContent = steps; $('#t-loss').textContent = hist.length ? hist[hist.length-1].toFixed(3) : '–'; $('#t-acc').textContent = hist.length ? Math.round(acc*100)+'%' : '–'; }
+  makeData(); init();
+
+  $('#t-play').addEventListener('click', () => { playing = !playing; $('#t-play').textContent = playing ? 'Pause' : 'Train'; });
+  $('#t-step').addEventListener('click', () => { step(); updStats(); });
+  $('#t-reset').addEventListener('click', () => { seed = (Date.now()%100000)+1; init(); });
+  $('#t-lr').addEventListener('change', e => lr = +e.target.value);
+  $$('#t-ds button').forEach(b => b.addEventListener('click', () => { ds = b.dataset.ds; press($('#t-ds'), b); makeData(); init(); if(!playing){ playing = true; $('#t-play').textContent = 'Pause'; } }));
+
+  const G = 18, nodeCv = [], GB = 44; const bOff = document.createElement('canvas'); bOff.width = bOff.height = GB;
+  for(let l=0;l<=NL;l++){ nodeCv.push([]); for(let i=0;i<sizes[l];i++){ const c = document.createElement('canvas'); c.width = c.height = G; nodeCv[l].push(c); } }
+  const toD = v => v*1.2;  // grid -> data coords
+  function paint(img, idx, v, bg, pos, neg){ const t = Math.min(1,Math.abs(v))*.85; const c = v>=0 ? pos : neg; img.data[idx] = bg[0]+(c[0]-bg[0])*t; img.data[idx+1] = bg[1]+(c[1]-bg[1])*t; img.data[idx+2] = bg[2]+(c[2]-bg[2])*t; img.data[idx+3] = 255; }
+  function renderMaps(){
+    const bg = rgb(COL.paper), pos = rgb(COL.nn), neg = rgb(COL.warm);
+    const imgs = nodeCv.map(layer => layer.map(c => c.getContext('2d').createImageData(G,G)));
+    for(let gy=0;gy<G;gy++) for(let gx=0;gx<G;gx++){ const x = toD(gx/(G-1)*2-1), y = toD(1-gy/(G-1)*2); const acts = fwd([x,y]); const idx = (gy*G+gx)*4;
+      for(let l=0;l<=NL;l++) for(let i=0;i<sizes[l];i++){ let v = acts[l][i]; if(l===0) v = v/1.2; if(l===NL) v = v*2-1; paint(imgs[l][i], idx, v, bg, pos, neg); } }
+    nodeCv.forEach((layer,l) => layer.forEach((c,i) => c.getContext('2d').putImageData(imgs[l][i],0,0)));
+    const bi = bOff.getContext('2d').createImageData(GB,GB);
+    for(let gy=0;gy<GB;gy++) for(let gx=0;gx<GB;gx++){ const x = toD(gx/(GB-1)*2-1), y = toD(1-gy/(GB-1)*2); const p = fwd([x,y])[NL][0]; paint(bi,(gy*GB+gx)*4,(p*2-1)*.75,bg,pos,neg); }
+    bOff.getContext('2d').putImageData(bi,0,0);
+  }
+
+  const net = $('#netCv'), bound = $('#boundCv'), lossC = $('#lossCv'); let lastPh = '';
+  addLoop(net, dt => {
+    if(playing){ for(let s=0;s<3;s++) step(); updStats(); waveT += dt*SPEED; if(steps >= 4000){ playing = false; $('#t-play').textContent = 'Train'; } }
+    renderMaps();
+    const {ctx,w,h} = fit(net); ctx.clearRect(0,0,w,h);
+    const s = Math.max(22, Math.min(34, (h-30)/6 - 10)); const padX = 26;
+    const pos = (l,i) => { const x = padX + (w-2*padX-s)*l/NL; const gap = (h-24)/6; return [x, (h-8)/2 + (i-(sizes[l]-1)/2)*gap - s/2]; };
+    const xStart = padX + s, xEnd = w - padX - s;
+    let ph = (waveT % 1.8)/1.8; const fwdPh = ph < .5; const wx = fwdPh ? xStart + (xEnd-xStart)*(ph/.5) : xEnd - (xEnd-xStart)*((ph-.5)/.5);
+    ctx.lineCap = 'round';
+    for(let l=0;l<NL;l++) for(let j=0;j<sizes[l+1];j++) for(let i=0;i<sizes[l];i++){
+      const wt = W[l][j][i]; const a = pos(l,i), b = pos(l+1,j); const x0 = a[0]+s, y0 = a[1]+s/2, x1 = b[0], y1 = b[1]+s/2;
+      ctx.strokeStyle = A(wt>=0?COL.nn:COL.warm, .25+Math.min(.65,Math.abs(wt)*.3)); ctx.lineWidth = Math.min(6,.4+Math.abs(wt)*1.6);
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.bezierCurveTo((x0+x1)/2,y0,(x0+x1)/2,y1,x1,y1); ctx.stroke();
+      if(playing && wx > x0 && wx < x1){ const f = (wx-x0)/(x1-x0); const u = 1-f; const cxp = (x0+x1)/2;
+        const px = u*u*u*x0 + 3*u*u*f*cxp + 3*u*f*f*cxp + f*f*f*x1, py = u*u*u*y0 + 3*u*u*f*y0 + 3*u*f*f*y1 + f*f*f*y1;
+        if(fwdPh){ ctx.fillStyle = COL.ink; dot(ctx,px,py,2.4); ctx.fill(); } else { ctx.strokeStyle = COL.warm; ctx.lineWidth = 1.6; dot(ctx,px,py,3.2); ctx.stroke(); } } }
+    ctx.imageSmoothingEnabled = false;
+    for(let l=0;l<=NL;l++) for(let i=0;i<sizes[l];i++){ const [x,y] = pos(l,i); ctx.drawImage(nodeCv[l][i], x, y, s, s); ctx.strokeStyle = COL.ink; ctx.lineWidth = 1; ctx.strokeRect(x+.5,y+.5,s-1,s-1); }
+    ctx.fillStyle = COL.muted; ctx.font = `500 10px ${FONT_M}`; ctx.textAlign = 'center';
+    ['INPUT','HIDDEN 1','HIDDEN 2','OUTPUT'].forEach((t,l) => ctx.fillText(t, pos(l,0)[0]+s/2, h-4));
+    ctx.textAlign = 'right'; ctx.fillText('x₁', pos(0,0)[0]-5, pos(0,0)[1]+s/2+3); ctx.fillText('x₂', pos(0,1)[0]-5, pos(0,1)[1]+s/2+3);
+    const phNow = playing ? (fwdPh ? 'f' : 'b') : '';
+    if(phNow !== lastPh){ lastPh = phNow; $('#ph-f').classList.toggle('on', phNow!=='b'); $('#ph-b').classList.toggle('on', phNow==='b'); $('#ph-f').textContent = (phNow==='f'?'● ':'○ ')+'Forward pass: inputs → prediction'; $('#ph-b').textContent = (phNow==='b'?'● ':'○ ')+'Backpropagation: error → weight updates'; }
+
+    const B2 = fit(bound); const bc = B2.ctx; bc.clearRect(0,0,B2.w,B2.h); bc.imageSmoothingEnabled = true; bc.drawImage(bOff,0,0,B2.w,B2.h);
+    const mp = (x,y) => [(x/1.2+1)/2*B2.w, (1-(y/1.2+1)/2)*B2.h];
+    bc.strokeStyle = A(COL.ink,.15); bc.lineWidth = 1; bc.beginPath(); bc.moveTo(B2.w/2,0); bc.lineTo(B2.w/2,B2.h); bc.moveTo(0,B2.h/2); bc.lineTo(B2.w,B2.h/2); bc.stroke();
+    for(const d of data){ const [px,py] = mp(d[0],d[1]); bc.fillStyle = d[2] ? COL.nn : COL.warm; dot(bc,px,py,3.6); bc.fill(); bc.strokeStyle = COL.panel; bc.lineWidth = 1.2; bc.stroke(); }
+
+    const Lc = fit(lossC); const lc = Lc.ctx; lc.clearRect(0,0,Lc.w,Lc.h); const ml = 34, mb = 16, mt = 8, mr = 50;
+    const maxL = Math.max(.8, ...hist.slice(0,5)); const X = i => ml + (Lc.w-ml-mr)*i/Math.max(1,hist.length-1), Y = v => mt + (1-Math.min(1,v/maxL))*(Lc.h-mt-mb);
+    lc.strokeStyle = COL.rule; lc.lineWidth = 1; lc.font = `500 10px ${FONT_M}`; lc.fillStyle = COL.muted; lc.textAlign = 'right';
+    [0, maxL/2, maxL].forEach(v => { lc.beginPath(); lc.moveTo(ml,Y(v)); lc.lineTo(Lc.w-mr,Y(v)); lc.stroke(); lc.fillText(v.toFixed(2), ml-6, Y(v)+3); });
+    if(hist.length > 1){ lc.beginPath(); hist.forEach((v,i) => i?lc.lineTo(X(i),Y(v)):lc.moveTo(X(i),Y(v))); lc.lineTo(X(hist.length-1),Y(0)); lc.lineTo(X(0),Y(0)); lc.closePath(); lc.fillStyle = A(COL.nn,.14); lc.fill();
+      lc.beginPath(); hist.forEach((v,i) => i?lc.lineTo(X(i),Y(v)):lc.moveTo(X(i),Y(v))); lc.strokeStyle = COL.ink; lc.lineWidth = 1.6; lc.stroke();
+      const lv = hist[hist.length-1]; lc.fillStyle = COL.nn; dot(lc,X(hist.length-1),Y(lv),4); lc.fill(); lc.fillStyle = COL.ink; lc.textAlign = 'left'; lc.fillText(lv.toFixed(3), X(hist.length-1)+8, Y(lv)+3); }
+  });
+})();
+
+/* =========================================================
+   §3 · embeddings + positional encoding
+   ========================================================= */
+(function(){
+  const SENTS = ['The cat sat on the mat','Attention is all you need','I love neural networks'];
+  const NOTES = ['Look at “The” (pos 0) and “the” (pos 4): their meaning rows are identical because they are the same word. Only the position row tells them apart.','“is” and “all” sit next to each other, so their position patterns are similar in the slow-changing lower rows and differ in the fast top rows.','Every model input, whatever the sentence, ends up as one vector per token. From here on, the Transformer only sees these numbers.'];
+  let si = 0;
+  const pe = (pos,d) => { const i = Math.floor(d/2); const f = 1/Math.pow(100,(2*i)/8); return d%2 ? Math.cos(pos*f) : Math.sin(pos*f); };
+  function render(){
+    const toks = SENTS[si].split(' '); const g = $('#emb');
+    g.style.gridTemplateColumns = `118px repeat(${toks.length}, minmax(40px,1fr))`;
+    let html = '<div></div>' + toks.map((t,i) => `<div class="tok">${t}<small>pos ${i}</small></div>`).join('');
+    const rows = [['Meaning<br><span class="nnc">token embedding</span>', (t,i,d)=>hv(t,d)], ['+ Position<br><span class="tfc">sine waves</span>', (t,i,d)=>pe(i,d)], ['= Input to<br>block 1', (t,i,d)=>(hv(t,d)+pe(i,d))*.6]];
+    rows.forEach(([lab,fn],r) => { html += `<div class="lab">${lab}</div>`;
+      toks.forEach((t,i) => { html += '<div class="strip">'; for(let d=0;d<8;d++){ const v = fn(t,i,d); html += `<div class="cell" style="--c:${v>=0?'var(--nn)':'var(--warm)'};--p:${Math.round(Math.min(1,Math.abs(v))*88)}%;--d:${(r*.35+i*.05+d*.02).toFixed(2)}s" title="${v.toFixed(2)}"></div>`; } html += '</div>'; }); });
+    g.innerHTML = html; $('#e-note').textContent = NOTES[si];
+  }
+  $$('#e-sent button').forEach(b => b.addEventListener('click', () => { si = +b.dataset.i; press($('#e-sent'), b); render(); }));
+  render();
+})();
+
+/* =========================================================
+   §4 · attention explorer
+   ========================================================= */
+(function(){
+  const T = ['The','animal',"didn't",'cross','the','street','because','it','was','too','tired']; const N = T.length;
+  const NOTES = ['Each word mostly looks at the word just before it. Early layers in real models often contain heads like this.','“it” attends strongly to “animal”: the head has worked out what the pronoun refers to. “tired” also points back to the animal.','Verbs look back to their subjects, and “the” looks ahead to its noun. Turn on the causal mask to see what happens when looking ahead is forbidden.','Attention is spread widely, with a mild preference for nearby words and the key nouns. This gathers general context.'];
+  function logits(h){ const L = Array.from({length:N},()=>Array(N).fill(0)); const set = (i,j,v) => L[i][j] = v;
+    if(h===0) for(let i=0;i<N;i++){ L[i][i] = 1.2; if(i>0) L[i][i-1] = 4; }
+    if(h===1){ for(let i=0;i<N;i++) L[i][i] = 2; set(7,1,5.2); set(7,5,3.4); set(7,7,1); set(10,1,3.6); set(10,7,3.2); set(8,7,2.6); set(9,10,1.5); set(4,1,1.4); set(5,1,1.2); set(6,1,1.5); }
+    if(h===2){ for(let i=0;i<N;i++) L[i][i] = 1; set(0,1,3); set(4,5,3); set(2,1,4); set(3,1,4.5); set(3,2,2.2); set(5,3,3); set(6,3,2.5); set(8,7,4); set(9,10,3); set(10,7,3); set(10,8,2.4); set(7,7,1.5); set(1,3,2.5); }
+    if(h===3){ for(let i=0;i<N;i++) for(let j=0;j<N;j++) L[i][j] = -.18*Math.abs(i-j); for(let i=0;i<N;i++){ L[i][1] += 1; L[i][5] += .6; } }
+    return L; }
+  let head = 1, causal = false, sel = 7, raw, target, disp;
+  function compute(){ raw = logits(head).map((row,i) => row.map((v,j) => causal && j>i ? -Infinity : v)); target = raw.map(r => softmax(r)); if(!disp) disp = target.map(r => r.slice()); }
+  const chips = $('#a-chips'); chips.innerHTML = T.map((t,i) => `<button class="chip" data-i="${i}" aria-pressed="false">${t}</button>`).join('');
+  chips.addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; sel = +b.dataset.i; update(); });
+  const hm = $('#hm'); hm.style.gridTemplateColumns = `58px repeat(${N}, minmax(0,1fr))`;
+  hm.innerHTML = '<div></div>' + T.map(t => `<div class="ch">${t}</div>`).join('') + T.map((t,i) => `<button class="rh" data-i="${i}">${t}</button>` + T.map((_,j) => `<div class="c" data-i="${i}" data-j="${j}"></div>`).join('')).join('');
+  hm.addEventListener('click', e => { const el = e.target.closest('[data-i]'); if(!el) return; sel = +el.dataset.i; update(); });
+  const cells = $$('#hm .c'), rhs = $$('#hm .rh');
+  $$('#a-head button').forEach(b => b.addEventListener('click', () => { head = +b.dataset.h; press($('#a-head'), b); update(); }));
+  $('#a-causal').addEventListener('change', e => { causal = e.target.checked; update(); });
+  const sc = $('#a-scores'), wt = $('#a-weights');
+  sc.innerHTML = T.map(t => `<div class="bar"><span class="w">${t}</span><div class="track"><div class="fill score"></div></div><span class="v"></span></div>`).join('');
+  wt.innerHTML = T.map(t => `<div class="bar"><span class="w">${t}</span><div class="track"><div class="fill"></div></div><span class="v"></span></div>`).join('');
+  function update(){
+    compute();
+    chips.querySelectorAll('button').forEach((b,i) => b.setAttribute('aria-pressed', i===sel?'true':'false'));
+    $('#a-headnote').textContent = NOTES[head];
+    cells.forEach(c => { const i = +c.dataset.i, j = +c.dataset.j; const masked = !Number.isFinite(raw[i][j]); c.classList.toggle('mask', masked); c.style.setProperty('--p', masked ? '0%' : Math.round(Math.pow(target[i][j],.7)*100)+'%'); c.classList.toggle('rowon', i===sel); c.title = `${T[i]} → ${T[j]}: ${masked?'masked':Math.round(target[i][j]*100)+'%'}`; });
+    rhs.forEach((r,i) => r.classList.toggle('on', i===sel));
+    const row = raw[sel], fin = row.filter(Number.isFinite), mx = Math.max(...fin.map(Math.abs), 1);
+    sc.querySelectorAll('.bar').forEach((b,j) => { const v = row[j]; const ok = Number.isFinite(v); b.querySelector('.fill').style.width = ok ? Math.max(2,(v - Math.min(0,...fin))/(mx - Math.min(0,...fin))*100)+'%' : '0%'; b.querySelector('.v').textContent = ok ? v.toFixed(2) : 'masked'; });
+    wt.querySelectorAll('.bar').forEach((b,j) => { const v = target[sel][j]; b.querySelector('.fill').style.width = (v*100)+'%'; b.querySelector('.v').textContent = Number.isFinite(row[j]) ? (v*100).toFixed(1)+'%' : '—'; });
+    const top = target[sel].map((v,j)=>[v,j]).sort((a,b)=>b[0]-a[0]).slice(0,3);
+    $('#a-out').innerHTML = `new vector for “<b class="tfc">${T[sel]}</b>” = ` + top.map(([v,j]) => `<b>${v.toFixed(2)}</b>·v(${T[j]})`).join(' + ') + ' + …';
+  }
+  update();
+  const cv = $('#attCv');
+  cv.addEventListener('click', e => { const r = cv.getBoundingClientRect(); const rowH = (r.height-40)/N; const i = Math.floor((e.clientY-r.top-32)/rowH); if(i>=0 && i<N){ sel = i; update(); } });
+  addLoop(cv, dt => {
+    const k = 1 - Math.exp(-dt*7); for(let i=0;i<N;i++) for(let j=0;j<N;j++) disp[i][j] += (target[i][j]-disp[i][j])*k;
+    const {ctx,w,h} = fit(cv); ctx.clearRect(0,0,w,h);
+    const rowH = (h-40)/N, y = i => 32 + rowH*(i+.5), xl = Math.max(84, w*.28), xr = Math.min(w-90, w*.66);
+    ctx.font = `600 10px ${FONT_M}`; ctx.fillStyle = COL.muted; ctx.textAlign = 'right'; ctx.fillText('QUERY', xl-10, 14); ctx.textAlign = 'left'; ctx.fillText('KEY · WEIGHT', xr+10, 14);
+    ctx.lineCap = 'round';
+    for(let i=0;i<N;i++){ if(i===sel) continue; for(let j=0;j<N;j++){ const v = disp[i][j]; if(v<.02) continue; ctx.strokeStyle = A(COL.ink, v*.12); ctx.lineWidth = v*3; ctx.beginPath(); ctx.moveTo(xl,y(i)); ctx.bezierCurveTo((xl+xr)/2,y(i),(xl+xr)/2,y(j),xr,y(j)); ctx.stroke(); } }
+    for(let j=0;j<N;j++){ const v = disp[sel][j]; if(v<.005) continue; ctx.strokeStyle = A(COL.tf, .2+.8*Math.min(1,v*1.4)); ctx.lineWidth = .8+v*12; ctx.beginPath(); ctx.moveTo(xl,y(sel)); ctx.bezierCurveTo((xl+xr)/2,y(sel),(xl+xr)/2,y(j),xr,y(j)); ctx.stroke(); }
+    for(let i=0;i<N;i++){ const on = i===sel; ctx.textAlign = 'right'; ctx.font = `${on?600:400} 13.5px ${FONT_B}`; ctx.fillStyle = on ? COL.tf : COL.ink; ctx.fillText(T[i], xl-10, y(i)+4.5);
+      const v = disp[sel][i]; const masked = !Number.isFinite(raw[sel][i]);
+      ctx.textAlign = 'left'; ctx.font = `${v>.2?600:400} 13.5px ${FONT_B}`; ctx.fillStyle = masked ? A(COL.muted,.5) : COL.ink; ctx.fillText(T[i], xr+10, y(i)+4.5);
+      const tw = ctx.measureText(T[i]).width; ctx.font = `500 11px ${FONT_M}`; ctx.fillStyle = masked ? A(COL.muted,.6) : COL.tf; ctx.fillText(masked ? 'masked' : Math.round(v*100)+'%', xr+16+tw, y(i)+4);
+      ctx.fillStyle = on ? COL.tf : COL.muted; dot(ctx,xl,y(i),on?4:2.5); ctx.fill(); dot(ctx,xr,y(i),2.5); ctx.fill(); }
+  });
+})();
+
+/* =========================================================
+   §5 · block stepper
+   ========================================================= */
+(function(){
+  const ST = [
+    {n:'Text → tokens', tag:'shared', what:'The sentence is split into tokens, word pieces such as “un”, “believ”, “able”. Each token becomes an integer ID.', nn:'Any network needs numeric input. An image classifier gets pixel values; a fixed-size list either way.', tf:'The number of tokens can vary from one input to the next, up to the context limit.'},
+    {n:'Embedding lookup', tag:'shared', what:'Each token ID selects one row of a learned table, giving a vector of hundreds or thousands of numbers.', nn:'This is just a weight matrix, like any layer. It is learned by backprop like every other weight.', tf:'Same mechanism. Similar words end up with similar vectors.'},
+    {n:'+ Positional encoding', tag:'new', what:'A position signal is added to each vector so the model knows word order.', nn:'Not needed: input slot 1 is always slot 1, so position is built into the wiring.', tf:'Required, because attention treats its inputs as an unordered set.'},
+    {n:'Multi-head self-attention', tag:'new', what:'Every token computes query, key and value vectors. Scores between all pairs decide how much each token pulls from the others. Several heads do this in parallel.', nn:'No equivalent. Connections between inputs are fixed after training.', tf:'The defining part. Mixing weights are computed fresh for every input.'},
+    {n:'Add & Norm', tag:'shared', what:'The attention output is added back to its input (a residual connection), then normalised so values stay in a stable range.', nn:'Residual connections and normalisation come from deep CNNs such as ResNet.', tf:'Lets very deep stacks train without the signal fading away.'},
+    {n:'Feed-forward network', tag:'shared', what:'A two-layer MLP is applied to each token separately: expand to about 4× the width, apply an activation, project back.', nn:'This is exactly the network from §2: weighted sums, activation, weighted sums.', tf:'Holds roughly two-thirds of a Transformer’s weights. Much of the stored “knowledge” lives here.'},
+    {n:'Add & Norm', tag:'shared', what:'Another residual connection and normalisation.', nn:'Same trick as in deep CNNs.', tf:'Keeps the block stable.'},
+    {n:'Repeat × N blocks', tag:'shared', what:'The block is stacked many times: 12 in the original BERT-base, 96 in GPT-3. Each repetition refines every token’s vector using context.', nn:'Depth is the classic neural-network idea: more layers build more abstract features.', tf:'Every block has the same shape but its own weights.'},
+    {n:'Linear + softmax', tag:'shared', what:'The final vector of the last token is scored against every word in the vocabulary, and softmax turns scores into probabilities.', nn:'Identical to the output layer of any classifier.', tf:'The “classes” are the next possible tokens. See §6.'}
+  ];
+  const flow = $('#flow'); let cur = 0, timer = null;
+  const btn = (i) => `<button class="blk ${ST[i].tag==='shared'?'shared':''}" data-i="${i}"><span>${ST[i].n}</span><span class="tag ${ST[i].tag==='shared'?'nn':'tf'}">${ST[i].tag==='shared'?'Shared':'New'}</span></button>`;
+  flow.innerHTML = btn(0) + '<div class="arrow">↓</div>' + btn(1) + '<div class="arrow">↓</div>' + btn(2) + '<div class="arrow">↓</div>' +
+    `<div class="repeat"><span class="xn">× N</span>${btn(3)}${btn(4)}<div class="arrow">↓</div>${btn(5)}${btn(6)}</div>` + '<div class="arrow">↓</div>' + btn(7) + '<div class="arrow">↓</div>' + btn(8);
+  // stage 7 (“Repeat”) highlights the dashed group too
+  function show(i){ cur = (i+ST.length)%ST.length; const s = ST[cur];
+    $$('#flow .blk').forEach(b => b.classList.toggle('on', +b.dataset.i===cur));
+    $('#flow .repeat').style.borderColor = cur===7 ? 'var(--nn)' : '';
+    $('#b-detail').innerHTML = `<div class="num"><span class="packet"></span> Stage ${cur+1} of ${ST.length}</div><h3>${s.n}</h3><span class="tag ${s.tag==='shared'?'nn':'tf'}" style="justify-self:start">${s.tag==='shared'?'Shared with classic neural networks':'New in Transformers'}</span><p>${s.what}</p>
+      <div class="cmp"><div><span class="tag nn" style="justify-self:start">In a classic NN</span>${s.nn}</div><div><span class="tag tf" style="justify-self:start">In a Transformer</span>${s.tf}</div></div>`; }
+  flow.addEventListener('click', e => { const b = e.target.closest('.blk'); if(b){ stop(); show(+b.dataset.i); } });
+  function stop(){ clearInterval(timer); timer = null; $('#b-play').textContent = 'Play'; }
+  $('#b-play').addEventListener('click', () => { if(timer){ stop(); return; } $('#b-play').textContent = 'Pause'; show(cur+1); timer = setInterval(() => { if(cur === ST.length-1) stop(); else show(cur+1); }, 3400); });
+  $('#b-next').addEventListener('click', () => { stop(); show(cur+1); });
+  $('#b-prev').addEventListener('click', () => { stop(); show(cur-1); });
+  show(3);
+})();
+
+/* =========================================================
+   §6 · next-token prediction
+   ========================================================= */
+(function(){
+  const C = [['mat',3.1],['floor',2.3],['sofa',2.0],['bed',1.7],['rug',1.5],['roof',.9],['keyboard',.6],['moon',-.8]];
+  const bars = $('#p-bars'); let picked = null, tally = [];
+  bars.innerHTML = C.map(([w]) => `<div class="bar"><span class="w">${w}</span><div class="track"><div class="fill"></div></div><span class="v"></span></div>`).join('');
+  const probs = () => softmax(C.map(c=>c[1]), +$('#temp').value);
+  function render(){ const p = probs(); $('#o-temp').textContent = (+$('#temp').value).toFixed(2);
+    bars.querySelectorAll('.bar').forEach((b,i) => { b.querySelector('.fill').style.width = (p[i]*100)+'%'; b.querySelector('.fill').classList.toggle('nnf', picked===i); b.querySelector('.v').textContent = (p[i]*100).toFixed(1)+'%'; });
+    $('#p-ctx').innerHTML = 'The cat sat on the ' + (picked===null ? '<span class="blank">&nbsp;</span>' : `<mark>${C[picked][0]}</mark>`) + ' …';
+    $('#p-tally').innerHTML = tally.length ? tally.map(t => `<span>${t}</span>`).join('') : '<span class="muted" style="border:0;animation:none">No samples yet</span>'; }
+  function sample(){ const p = probs(); let r = Math.random(), i = 0; while(i < p.length-1 && (r -= p[i]) > 0) i++; picked = i; tally.unshift(C[i][0]); tally = tally.slice(0,20); }
+  $('#temp').addEventListener('input', render);
+  $('#p-sample').addEventListener('click', () => { sample(); render(); });
+  $('#p-many').addEventListener('click', () => { for(let k=0;k<20;k++) sample(); render(); });
+  $('#p-clear').addEventListener('click', () => { picked = null; tally = []; render(); });
+  render();
+})();
+
+/* =========================================================
+   §7a · fixed vs dynamic weights
+   ========================================================= */
+(function(){
+  const S = [['She','fed','the','hungry','cat'],['The','cat','chased','a','mouse'],['It','rained','so','we','stayed'],['Dogs','love','long','muddy','walks']];
+  const n = 5; let si = 0;
+  const Wd = Array.from({length:n},(_,j)=>Array.from({length:n},(_,i)=>hv('w'+i+'_'+j,0)*1.4));
+  const Wq = Array.from({length:4},(_,a)=>Array.from({length:4},(_,b)=>hv('q'+a+b,1))), Wk = Array.from({length:4},(_,a)=>Array.from({length:4},(_,b)=>hv('k'+a+b,1)));
+  const vec = w => [0,1,2,3].map(d => hv(w,d+3));
+  const mul = (v,M) => M[0].map((_,c) => v.reduce((s,x,r)=>s+x*M[r][c],0));
+  function attn(ws){ const E = ws.map(vec), Q = E.map(e=>mul(e,Wq)), K = E.map(e=>mul(e,Wk)); return Q.map((q,i) => softmax(K.map((k,j) => q.reduce((s,x,d)=>s+x*k[d],0)*1.4 - .25*Math.abs(i-j)))); }
+  let tA = attn(S[0]), dA = tA.map(r=>r.slice()), xin = S[0].map(w=>hv(w,0)), dX = xin.slice();
+  const outs = x => Wd.map(row => Math.tanh(row.reduce((s,w,i)=>s+w*x[i],0)));
+  function next(){ const prev = tA; si = (si+1)%S.length; tA = attn(S[si]); xin = S[si].map(w=>hv(w,0));
+    let ch = 0; for(let i=0;i<n;i++) for(let j=0;j<n;j++) ch += Math.abs(tA[i][j]-prev[i][j]); ch = ch/(2*n);
+    $('#f-chA').textContent = '0%'; $('#f-chB').textContent = Math.round(ch*100)+'%'; $('#f-sent').textContent = 'Input: “'+S[si].join(' ')+'”'; }
+  $('#f-sent').textContent = 'Input: “'+S[0].join(' ')+'”';
+  $('#f-next').addEventListener('click', () => { next(); autoT = 0; });
+  let autoT = 0;
+  const ca = $('#fixCvA'), cb = $('#fixCvB');
+  function cols(ctx,w,h,words,leftLab,rightLab){ const y = i => 34 + (h-50)*(i+.5)/n; return {y, xl: Math.max(80,w*.3), xr: Math.min(w-80,w*.7)}; }
+  addLoop(ca, (dt) => {
+    if($('#f-auto').checked && !reduce){ autoT += dt; if(autoT > 3.2){ autoT = 0; next(); } }
+    const k = 1-Math.exp(-dt*6); for(let i=0;i<n;i++){ dX[i] += (xin[i]-dX[i])*k; for(let j=0;j<n;j++) dA[i][j] += (tA[i][j]-dA[i][j])*k; }
+    const {ctx,w,h} = fit(ca); ctx.clearRect(0,0,w,h); const {y,xl,xr} = cols(ctx,w,h);
+    ctx.font = `600 10px ${FONT_M}`; ctx.fillStyle = COL.muted; ctx.textAlign = 'center'; ctx.fillText('INPUT', xl, 16); ctx.fillText('OUTPUT', xr, 16);
+    for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const wt = Wd[j][i]; ctx.strokeStyle = A(wt>=0?COL.nn:COL.warm,.55); ctx.lineWidth = .5+Math.abs(wt)*2.6; ctx.beginPath(); ctx.moveTo(xl,y(i)); ctx.lineTo(xr,y(j)); ctx.stroke(); }
+    const o = outs(dX);
+    for(let i=0;i<n;i++){ [[xl,dX[i]],[xr,o[i]]].forEach(([x,v]) => { ctx.fillStyle = COL.paper; dot(ctx,x,y(i),11); ctx.fill(); ctx.fillStyle = A(v>=0?COL.nn:COL.warm, Math.abs(v)*.85); ctx.fill(); ctx.strokeStyle = COL.ink; ctx.lineWidth = 1; ctx.stroke(); });
+      ctx.fillStyle = COL.ink; ctx.font = `500 13px ${FONT_B}`; ctx.textAlign = 'right'; ctx.fillText(S[si][i], xl-18, y(i)+4.5); ctx.textAlign = 'left'; ctx.font = `500 11px ${FONT_M}`; ctx.fillStyle = COL.muted; ctx.fillText(fmt(o[i]), xr+18, y(i)+4); }
+  });
+  addLoop(cb, () => {
+    const {ctx,w,h} = fit(cb); ctx.clearRect(0,0,w,h); const {y,xl,xr} = cols(ctx,w,h);
+    ctx.font = `600 10px ${FONT_M}`; ctx.fillStyle = COL.muted; ctx.textAlign = 'center'; ctx.fillText('QUERY', xl, 16); ctx.fillText('KEY', xr, 16);
+    ctx.lineCap = 'round';
+    for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const v = dA[i][j]; ctx.strokeStyle = A(COL.tf,.15+.85*v); ctx.lineWidth = .5+v*9; ctx.beginPath(); ctx.moveTo(xl,y(i)); ctx.bezierCurveTo((xl+xr)/2,y(i),(xl+xr)/2,y(j),xr,y(j)); ctx.stroke(); }
+    for(let i=0;i<n;i++){ ctx.fillStyle = COL.tf; dot(ctx,xl,y(i),3.5); ctx.fill(); dot(ctx,xr,y(i),3.5); ctx.fill();
+      ctx.fillStyle = COL.ink; ctx.font = `500 13px ${FONT_B}`; ctx.textAlign = 'right'; ctx.fillText(S[si][i], xl-12, y(i)+4.5); ctx.textAlign = 'left'; ctx.fillText(S[si][i], xr+12, y(i)+4.5); }
+  });
+})();
+
+/* =========================================================
+   §7b · sequential vs parallel race
+   ========================================================= */
+(function(){
+  const cv = $('#raceCv'); let n = 8, t = -1;
+  const WORDS = ['The','old','robot','slowly','opened','the','heavy','door','and','looked','out','at','the','quiet','grey','sea'];
+  function kv(){ $('#o-raceN').textContent = n;
+    $('#r-kv').innerHTML = `<span class="h">For n = ${n} tokens</span><span class="h">RNN</span><span class="h">Transformer</span>
+      <span>Steps that must run one after another</span><b class="warmc">${n}</b><b class="tfc">1</b>
+      <span>Hops from first word to last</span><b class="warmc">${n-1}</b><b class="tfc">1</b>
+      <span>Word pairs compared directly</span><b class="warmc">0</b><b class="tfc">${n*n}</b>
+      <span class="muted small" style="grid-column:1/-1">The RNN squeezes everything it has read into one running summary. The Transformer compares every pair directly, which is why doubling the text length roughly quadruples attention cost.</span>`; }
+  $('#raceN').addEventListener('input', e => { n = +e.target.value; t = -1; kv(); });
+  $('#r-run').addEventListener('click', () => { t = 0; });
+  kv();
+  addLoop(cv, dt => {
+    if(t >= 0) t += dt*SPEED;
+    const {ctx,w,h} = fit(cv); ctx.clearRect(0,0,w,h);
+    const gap = 5, bw = Math.min(54,(w-24-gap*(n-1))/n), x0 = (w - (bw*n + gap*(n-1)))/2, bh = 26; const cx = i => x0 + i*(bw+gap) + bw/2;
+    const step = .32, rnnDone = t<0 ? (t===-1?0:0) : Math.min(n, Math.floor(t/step)+1), tfOn = t >= .05;
+    const y1 = 46, y2 = h-40;
+    ctx.font = `600 10px ${FONT_M}`; ctx.textAlign = 'left'; ctx.fillStyle = COL.muted;
+    ctx.fillText('RECURRENT NET · one word per step · steps: '+(t<0?0:rnnDone), x0, y1-16);
+    ctx.fillText('TRANSFORMER LAYER · all words at once · steps: '+(tfOn?1:0), x0, y2-58);
+    const fs = Math.max(8.5, Math.min(12, bw/4.6));
+    for(let i=0;i<n;i++){ const done = t>=0 && i < rnnDone; rr(ctx, cx(i)-bw/2, y1, bw, bh, 5); ctx.fillStyle = done ? A(COL.warm,.22) : COL.paper; ctx.fill(); ctx.strokeStyle = done ? COL.warm : COL.rule; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = COL.ink; ctx.font = `500 ${fs}px ${FONT_B}`; ctx.textAlign = 'center'; ctx.fillText(WORDS[i].slice(0, Math.max(3,Math.floor(bw/7))), cx(i), y1+bh/2+4); }
+    if(t >= 0 && rnnDone <= n){ const p = Math.min(n-1, t/step); const i = Math.floor(p), f = p - i; if(t/step < n){ const x = cx(i) + (i<n-1 ? f*(bw+gap) : 0); ctx.fillStyle = COL.warm; dot(ctx, x, y1+bh+9, 4); ctx.fill(); ctx.font = `500 9px ${FONT_M}`; ctx.fillText('h', x, y1+bh+22); } }
+    if(tfOn){ const a = Math.min(1, (t-.05)/.4); ctx.lineCap = 'round';
+      for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){ const xa = cx(i), xb = cx(j); ctx.strokeStyle = A(COL.tf, .18*a); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(xa,y2); ctx.quadraticCurveTo((xa+xb)/2, y2 - Math.min(44, 8+Math.abs(xb-xa)*.3), xb, y2); ctx.stroke(); } }
+    for(let i=0;i<n;i++){ rr(ctx, cx(i)-bw/2, y2, bw, bh, 5); ctx.fillStyle = tfOn ? A(COL.tf,.2) : COL.paper; ctx.fill(); ctx.strokeStyle = tfOn ? COL.tf : COL.rule; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = COL.ink; ctx.font = `500 ${fs}px ${FONT_B}`; ctx.textAlign = 'center'; ctx.fillText(WORDS[i].slice(0, Math.max(3,Math.floor(bw/7))), cx(i), y2+bh/2+4); }
+  });
+})();
+
+/* =========================================================
+   §8 · quiz
+   ========================================================= */
+(function(){
+  const Q = [
+    {q:'Which part of a Transformer block is a classic feed-forward neural network?', o:['Self-attention','The feed-forward (MLP) sublayer','Positional encoding'], a:1, why:'Each block applies a two-layer MLP to every token: the same structure as the network in §2.'},
+    {q:'You give a trained MLP a brand-new input. What happens to its connection weights?', o:['They are recomputed from the input','They are reset at random','They stay exactly the same'], a:2, why:'Weights change only during training. At use time the wiring is fixed; only the values flowing through it change.'},
+    {q:'Why does a Transformer add positional encodings?', o:['Attention on its own ignores word order','It makes training faster','It shrinks the vocabulary'], a:0, why:'Attention compares tokens as an unordered set, so order must be added explicitly.'},
+    {q:'How are both a classic neural network and a Transformer trained?', o:['With hand-written rules','With backpropagation and gradient descent','By attention alone'], a:1, why:'Both compute a loss, send gradients backwards, and nudge every weight downhill.'},
+    {q:'For a sequence of n tokens, how does the number of attention scores per head grow?', o:['n','log n','n²'], a:2, why:'Every token scores every other token, giving n × n pairs. That is the main cost of long contexts.'}
+  ];
+  const box = $('#quizBox'); const got = new Array(Q.length).fill(null);
+  box.innerHTML = Q.map((x,i) => `<div class="inst q"><h3>${i+1}. ${x.q}</h3><div class="opts">${x.o.map((o,j)=>`<button data-q="${i}" data-o="${j}">${o}</button>`).join('')}</div><div class="fb" id="fb${i}" aria-live="polite"></div></div>`).join('');
+  box.addEventListener('click', e => { const b = e.target.closest('button'); if(!b) return; const i = +b.dataset.q, j = +b.dataset.o, x = Q[i];
+    b.parentElement.querySelectorAll('button').forEach(o => o.classList.remove('right','wrong'));
+    b.classList.add(j===x.a ? 'right' : 'wrong'); if(got[i]===null) got[i] = j===x.a;
+    $('#fb'+i).innerHTML = (j===x.a ? '<b class="nnc">Correct.</b> ' : '<b class="warmc">Not quite.</b> ') + x.why;
+    const done = got.filter(v=>v!==null).length; $('#score').textContent = `First-try score: ${got.filter(Boolean).length} / ${done} answered.`; });
+})();
+})();
+</script>
+
+</body></html>
