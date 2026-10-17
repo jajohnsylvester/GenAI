@@ -1,1 +1,1 @@
-
+https://www.ibm.com/think/topics/reasoning-model
